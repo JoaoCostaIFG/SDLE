@@ -1,10 +1,10 @@
 # SDLE Project
 
-SDLE Project for group T&lt;n&gt;G&lt;p&gt;&lt;q&gt;.
+SDLE Project for group T3G11.
 
 Group members:
 
-1. &lt;first name&gt; &lt;family name&gt; (&lt;email address&gt;)
-2. &lt;first name&gt; &lt;family name&gt; (&lt;email address&gt;)
-3. &lt;first name&gt; &lt;family name&gt; (&lt;email address&gt;)
-4. &lt;first name&gt; &lt;family name&gt; (&lt;email address&gt;)
+1. Davide Castro (up201806512@edu.fe.up.pt)
+2. Henrique Ribeiro (up201806529@edu.fe.up.pt)
+3. João Costa (up201806560@edu.fe.up.pt)
+4. Tiago Silva (up201806516@edu.fe.up.pt)
