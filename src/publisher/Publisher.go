@@ -30,5 +30,5 @@ func (p *Publisher) Connect(endpoint string) error {
 }
 
 func (p *Publisher) Put(topic string, msg string) {
-	p.s.SendMessage(topic, msg)
+	p.s.SendMessage(topic + " " + msg)
 }

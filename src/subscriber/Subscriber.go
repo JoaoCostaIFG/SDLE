@@ -3,9 +3,11 @@ package subscriber
 import zmq "github.com/pebbe/zmq4"
 
 type SubscriberI interface {
-	Connect(endpoint string) error
-	Get() (string, string)
 	Destroy() error
+	Connect(endpoint string) error
+	Get() []string
+	Subscribe(string) error
+	Unsubscribe(string) error
 }
 
 type Subscriber struct {
@@ -29,7 +31,15 @@ func (p *Subscriber) Connect(endpoint string) error {
 	return p.s.Connect(endpoint)
 }
 
-func (p *Subscriber) Get() (string, string) {
+func (p *Subscriber) Get() []string {
 	msg, _ := p.s.RecvMessage(0)
-	return msg[0], msg[1]
+	return msg
+}
+
+func (p *Subscriber) Subscribe(topic string) error {
+	return p.s.SetSubscribe(topic)
+}
+
+func (p *Subscriber) Unsubscribe(topic string) error {
+	return p.s.SetUnsubscribe(topic)
 }
