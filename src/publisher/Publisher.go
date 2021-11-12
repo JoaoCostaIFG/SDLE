@@ -25,8 +25,8 @@ func (p *Publisher) Destroy() error {
 	return p.s.Close()
 }
 
-func (p *Publisher) Connect(point string) error {
-	return p.s.Connect(point)
+func (p *Publisher) Connect(endpoint string) error {
+	return p.s.Connect(endpoint)
 }
 
 func (p *Publisher) Put(topic string, msg string) {
