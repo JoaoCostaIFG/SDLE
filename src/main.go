@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
+	"github.com/golang-collections/go-datastructures/queue"
+	"github.com/golang-collections/go-datastructures/set"
 	zmq "github.com/pebbe/zmq4"
 	"math/rand"
 	"os"
 	"src/publisher"
 	"src/subscriber"
+	"strings"
 	"time"
 )
 
@@ -65,11 +68,14 @@ func subscribe(zctx *zmq.Context, endpoint string) {
 }
 
 func proxy(zctx *zmq.Context, pub_port string, sub_port string) {
-	pubs, _ := zctx.NewSocket(zmq.XSUB)
+	var sub_map = make(map[string]*set.Set)
+	var msg_queues = make(map[string]*queue.Queue)
+
+	pubs, _ := zctx.NewSocket(zmq.ROUTER)
 	defer pubs.Close()
 	pubs.Bind("tcp://*:" + pub_port)
 
-	subs, _ := zctx.NewSocket(zmq.XPUB)
+	subs, _ := zctx.NewSocket(zmq.ROUTER)
 	defer subs.Close()
 	subs.Bind("tcp://*:" + sub_port)
 
@@ -79,17 +85,65 @@ func proxy(zctx *zmq.Context, pub_port string, sub_port string) {
 
 	for {
 		sockets, _ := poller.Poll(-1)
-		// fmt.Print(sockets)
+		fmt.Print(sockets)
 		for _, socket := range sockets {
 			switch s := socket.Socket; s {
 			case subs:
 				msg, _ := s.RecvMessage(0)
-				fmt.Printf("Sub %s\n", msg)
-				pubs.SendMessage(msg)
+				// TODO check for NULL frame
+				id := msg[0]
+				content := msg[2]
+				fmt.Printf("Sub %s - %s\n", id, content)
+
+				// handle message
+				split_content := strings.SplitN(content, " ", 2)
+				// TODO check len
+				switch cmd := split_content[0]; cmd {
+				case "sub":
+					arg := split_content[1]
+					sub_set, ok := sub_map[id]
+					if !ok {
+						// subscriber subs for the first time, create his dataset
+						sub_set = set.New(5)
+						sub_map[id] = sub_set
+					}
+					sub_set.Add(arg)
+				case "unsub":
+					arg := split_content[1]
+					sub_set, ok := sub_map[id]
+					if !ok {
+						// subscriber subs for the first time, create his dataset
+						sub_set = set.New(5)
+						sub_map[id] = sub_set
+					}
+					sub_set.Remove(arg)
+				}
 			case pubs:
+				// receive message
 				msg, _ := s.RecvMessage(0)
-				fmt.Printf("Pub %s\n", msg)
-				subs.SendMessage(msg)
+				// TODO check for NULL frame
+				id := msg[0]
+				content := msg[2]
+				fmt.Printf("Pub %s - %s\n", id, content)
+
+				// handle message
+				// TODO check len
+				split_content := strings.SplitN(content, " ", 2)
+				topic := split_content[0]
+				update := split_content[1]
+				q, ok := msg_queues[topic]
+				// TODO mutex pwease
+				if !ok {
+					// topic does not exists, create queue for it
+					q = queue.New(100)
+					msg_queues[topic] = q
+				}
+				// push new update
+				q.Put(update)
+
+				// send OK reply
+				msg[2] = "We got you fam"
+				pubs.SendMessage(msg)
 			}
 		}
 	}

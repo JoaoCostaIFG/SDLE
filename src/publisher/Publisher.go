@@ -1,6 +1,9 @@
 package publisher
 
-import zmq "github.com/pebbe/zmq4"
+import (
+	"fmt"
+	zmq "github.com/pebbe/zmq4"
+)
 
 type PublisherI interface {
 	Connect(endpoint string) error
@@ -16,7 +19,7 @@ type Publisher struct {
 func NewPublisher(zctx *zmq.Context) (*Publisher, error) {
 	p := new(Publisher)
 	p.zctx = zctx
-	s, e := p.zctx.NewSocket(zmq.PUB)
+	s, e := p.zctx.NewSocket(zmq.REQ)
 	p.s = s
 	return p, e
 }
@@ -31,4 +34,7 @@ func (p *Publisher) Connect(endpoint string) error {
 
 func (p *Publisher) Put(topic string, msg string) {
 	p.s.SendMessage(topic + " " + msg)
+	fmt.Printf("Put mandou: %s %s\n", topic, msg)
+	reply, _ := p.s.RecvMessage(0)
+	fmt.Printf("Put recebeu: %s\n", reply)
 }

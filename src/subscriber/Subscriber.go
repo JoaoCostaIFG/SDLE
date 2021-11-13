@@ -6,8 +6,8 @@ type SubscriberI interface {
 	Destroy() error
 	Connect(endpoint string) error
 	Get() []string
-	Subscribe(string) error
-	Unsubscribe(string) error
+	Subscribe(string)
+	Unsubscribe(string)
 }
 
 type Subscriber struct {
@@ -16,30 +16,30 @@ type Subscriber struct {
 }
 
 func NewSubscriber(zctx *zmq.Context) (*Subscriber, error) {
-	p := new(Subscriber)
-	p.zctx = zctx
-	s, e := p.zctx.NewSocket(zmq.SUB)
-	p.s = s
-	return p, e
+	s := new(Subscriber)
+	s.zctx = zctx
+	socket, e := s.zctx.NewSocket(zmq.REQ)
+	s.s = socket
+	return s, e
 }
 
-func (p *Subscriber) Destroy() error {
-	return p.s.Close()
+func (s *Subscriber) Destroy() error {
+	return s.s.Close()
 }
 
-func (p *Subscriber) Connect(endpoint string) error {
-	return p.s.Connect(endpoint)
+func (s *Subscriber) Connect(endpoint string) error {
+	return s.s.Connect(endpoint)
 }
 
-func (p *Subscriber) Get() []string {
-	msg, _ := p.s.RecvMessage(0)
-	return msg
+func (s *Subscriber) Get() []string {
+	//msg, _ := s.s.RecvMessage(0)
+	return []string{"a", "b"}
 }
 
-func (p *Subscriber) Subscribe(topic string) error {
-	return p.s.SetSubscribe(topic)
+func (s *Subscriber) Subscribe(topic string) {
+	s.s.SendMessage("sub " + topic)
 }
 
-func (p *Subscriber) Unsubscribe(topic string) error {
-	return p.s.SetUnsubscribe(topic)
+func (s *Subscriber) Unsubscribe(topic string) {
+	s.s.SendMessage("unsub " + topic)
 }
