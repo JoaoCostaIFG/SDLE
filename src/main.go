@@ -67,17 +67,17 @@ func subscribe(zctx *zmq.Context, endpoint string) {
 	}
 }
 
-func proxy(zctx *zmq.Context, pub_port string, sub_port string) {
-	var sub_map = make(map[string]*set.Set)
-	var msg_queues = make(map[string]*queue.Queue)
+func proxy(zctx *zmq.Context, pubPort string, subPort string) {
+	var subMap = make(map[string]*set.Set)
+	var msgQueues = make(map[string]*queue.Queue)
 
 	pubs, _ := zctx.NewSocket(zmq.ROUTER)
 	defer pubs.Close()
-	pubs.Bind("tcp://*:" + pub_port)
+	pubs.Bind("tcp://*:" + pubPort)
 
 	subs, _ := zctx.NewSocket(zmq.ROUTER)
 	defer subs.Close()
-	subs.Bind("tcp://*:" + sub_port)
+	subs.Bind("tcp://*:" + subPort)
 
 	poller := zmq.NewPoller()
 	poller.Add(pubs, zmq.POLLIN)
@@ -85,7 +85,6 @@ func proxy(zctx *zmq.Context, pub_port string, sub_port string) {
 
 	for {
 		sockets, _ := poller.Poll(-1)
-		fmt.Print(sockets)
 		for _, socket := range sockets {
 			switch s := socket.Socket; s {
 			case subs:
@@ -93,30 +92,74 @@ func proxy(zctx *zmq.Context, pub_port string, sub_port string) {
 				// TODO check for NULL frame
 				id := msg[0]
 				content := msg[2]
-				fmt.Printf("Sub %s - %s\n", id, content)
 
 				// handle message
-				split_content := strings.SplitN(content, " ", 2)
+				splitContent := strings.SplitN(content, " ", 2)
 				// TODO check len
-				switch cmd := split_content[0]; cmd {
+				switch cmd := splitContent[0]; cmd {
 				case "sub":
-					arg := split_content[1]
-					sub_set, ok := sub_map[id]
+					fmt.Printf("Sub %s - %s\n", id, content)
+
+					arg := splitContent[1]
+					subsSet, ok := subMap[id]
 					if !ok {
 						// subscriber subs for the first time, create his dataset
-						sub_set = set.New(5)
-						sub_map[id] = sub_set
+						subsSet = set.New(5)
+						subMap[id] = subsSet
 					}
-					sub_set.Add(arg)
+					subsSet.Add(arg)
+
+					// send OK reply
+					msg[2] = "OK SUB"
+					subs.SendMessage(msg)
 				case "unsub":
-					arg := split_content[1]
-					sub_set, ok := sub_map[id]
+					fmt.Printf("Unsub %s - %s\n", id, content)
+
+					arg := splitContent[1]
+					subsSet, ok := subMap[id]
 					if !ok {
 						// subscriber subs for the first time, create his dataset
-						sub_set = set.New(5)
-						sub_map[id] = sub_set
+						subsSet = set.New(5)
+						subMap[id] = subsSet
 					}
-					sub_set.Remove(arg)
+					subsSet.Remove(arg)
+
+					// send OK reply
+					msg[2] = "OK UNSUB"
+					subs.SendMessage(msg)
+				case "get":
+					fmt.Printf("Get %s\n", id)
+
+					subscriptions, ok := subMap[id]
+					if ok {
+						// TODO RIP performance
+						var update string
+
+						for _, subscriptionI := range subscriptions.Flatten() {
+							subscription := subscriptionI.(string)
+							q, ok := msgQueues[subscription]
+							if ok && !q.Empty() {
+								updates, _ := q.Get(1)
+								update = updates[0].(string)
+								break
+							}
+						}
+
+						if update == "" {
+							// TODO é suposto dar block
+							// send EMPTY reply
+							msg[2] = ""
+							subs.SendMessage(msg)
+						} else {
+							// send the UPDATE reply
+							msg[2] = update
+							subs.SendMessage(msg)
+						}
+					} else {
+						// TODO send ERROR reply
+						msg[2] = ""
+						subs.SendMessage(msg)
+					}
 				}
 			case pubs:
 				// receive message
@@ -128,21 +171,21 @@ func proxy(zctx *zmq.Context, pub_port string, sub_port string) {
 
 				// handle message
 				// TODO check len
-				split_content := strings.SplitN(content, " ", 2)
-				topic := split_content[0]
-				update := split_content[1]
-				q, ok := msg_queues[topic]
+				splitContent := strings.SplitN(content, " ", 2)
+				topic := splitContent[0]
+				update := splitContent[1]
+				q, ok := msgQueues[topic]
 				// TODO mutex pwease
 				if !ok {
 					// topic does not exists, create queue for it
 					q = queue.New(100)
-					msg_queues[topic] = q
+					msgQueues[topic] = q
 				}
 				// push new update
 				q.Put(update)
 
 				// send OK reply
-				msg[2] = "We got you fam"
+				msg[2] = "OK PUB"
 				pubs.SendMessage(msg)
 			}
 		}

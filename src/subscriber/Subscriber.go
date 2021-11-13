@@ -1,6 +1,9 @@
 package subscriber
 
-import zmq "github.com/pebbe/zmq4"
+import (
+	"fmt"
+	zmq "github.com/pebbe/zmq4"
+)
 
 type SubscriberI interface {
 	Destroy() error
@@ -32,14 +35,19 @@ func (s *Subscriber) Connect(endpoint string) error {
 }
 
 func (s *Subscriber) Get() []string {
-	//msg, _ := s.s.RecvMessage(0)
-	return []string{"a", "b"}
+	s.s.SendMessage("get")
+	reply, _ := s.s.RecvMessage(0)
+	return reply
 }
 
 func (s *Subscriber) Subscribe(topic string) {
 	s.s.SendMessage("sub " + topic)
+	reply, _ := s.s.RecvMessage(0)
+	fmt.Printf("Subbed: %s: %s\n", topic, reply)
 }
 
 func (s *Subscriber) Unsubscribe(topic string) {
 	s.s.SendMessage("unsub " + topic)
+	reply, _ := s.s.RecvMessage(0)
+	fmt.Printf("Unsubbed: %s: %s\n", topic, reply)
 }
