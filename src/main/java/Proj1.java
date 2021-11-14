@@ -1,14 +1,14 @@
 import org.zeromq.ZContext;
-import proxy.Proxy;
-import publisher.Publisher;
+import org.zeromq.ZMQ;
 
 import java.util.Random;
 
 public class Proj1 {
-    ZContext zctx = new ZContext();
+    ZContext zctx;
     String id;
 
     public Proj1(String id) {
+        this.zctx = new ZContext();
         this.id = id;
     }
 
@@ -17,7 +17,7 @@ public class Proj1 {
     }
 
     public void publisher(String endpoint) {
-        Publisher p = new Publisher(this.zctx);
+        Publisher p = new Publisher(this.zctx, this.id);
         if (!p.connect(endpoint)) {
             p.destroy();
             return;
@@ -39,6 +39,32 @@ public class Proj1 {
         }
 
         //p.destroy();
+    }
+
+    private void subscriber(String endpoint) {
+        Subscriber s = new Subscriber(this.zctx, this.id);
+        if (!s.connect(endpoint)) {
+            s.destroy();
+            return;
+        }
+
+        String topic = "10001";
+        if (!s.subscribe(topic)) {
+            System.out.println("Sub failure");
+            return;
+        }
+
+        for (; true; ) {
+            String update = s.get(topic);
+
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
+        //s.destroy();
     }
 
     public void proxy(int pubPort, int subPort) {
@@ -65,6 +91,7 @@ public class Proj1 {
                 new Proj1(id).publisher("tcp://localhost:5559");
                 break;
             case "sub":
+                new Proj1(id).subscriber("tcp://localhost:5560");
                 break;
             case "proxy":
                 new Proj1(id).proxy(5559, 5560);
