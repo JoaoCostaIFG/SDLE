@@ -53,14 +53,16 @@ public class Subscriber extends SocketHolder {
 
         ZMsg replyZMsg = ZMsg.recvMsg(this.socket);
         UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
-        if (reply.getCmd().equals(GETCMD) &&
-                reply.getArg(0).equals(Proxy.OKREPLY)) {
-            String ret = reply.getArg(1);
-            System.out.printf("Get success: %s\n", ret);
-            return ret;
-        } else {
+        if (!reply.getCmd().equals(GETCMD) || reply.getArg(0).equals(Proxy.ERRREPLY)) {
             System.out.println("Get failure");
             return null;
+        } else if (reply.getArg(0).equals(Proxy.EMPTYREPLY)) {
+            System.out.println("Get no updates yes (TODO block)");
+            return "";
         }
+
+        String ret = reply.getArg(1);
+        System.out.printf("Get success: %s\n", ret);
+        return ret;
     }
 }

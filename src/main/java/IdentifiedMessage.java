@@ -1,6 +1,7 @@
 import org.zeromq.ZFrame;
 import org.zeromq.ZMsg;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,12 +20,16 @@ public class IdentifiedMessage extends UnidentifiedMessage {
     }
 
     public ZFrame getIdentity() {
-        return identity;
+        return this.identity;
     }
 
     public ZMsg newZMsg() {
         ZMsg ret = super.newZMsg();
         ret.wrap(this.identity);
         return ret;
+    }
+
+    public String getIdentityStr() {
+        return this.identity.getString(StandardCharsets.UTF_8);
     }
 }

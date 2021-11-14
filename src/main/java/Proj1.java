@@ -31,11 +31,6 @@ public class Proj1 {
 
             String topic = String.format("%05d", zipcode);
             p.put(topic, String.valueOf(temperature));
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
         }
 
         //p.destroy();
