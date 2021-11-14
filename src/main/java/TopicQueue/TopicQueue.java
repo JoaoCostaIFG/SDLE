@@ -1,38 +1,67 @@
 package TopicQueue;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Map;
 
 public class TopicQueue {
+    // people that subscribed to this queue
+    private final Map<String, QueueNode> subs;
     // first node
     private QueueNode head;
     // last node
     private QueueNode tail;
     // queue size
     private int size;
-    private Set<String> subs;
 
     public TopicQueue() {
         this.head = null;
         this.tail = null;
         this.size = 0;
-        this.subs = new HashSet<>();
+        this.subs = new HashMap<>();
     }
 
     public void push(String content) {
         if (this.size == 0) this.head = this.tail = new QueueNode(content);
         else this.tail = new QueueNode(content, this.tail);
 
+        // set next message for those that don't have any
+        for (Map.Entry<String, QueueNode> e : this.subs.entrySet()) {
+            if (e.getValue() == null) {
+                this.subs.put(e.getKey(), this.tail);
+                this.tail.increaseRef();
+            }
+        }
+
         ++this.size;
     }
 
-    public String pop() {
-        if (this.size == 0) return null;
-        --this.size;
+    public String retrieveUpdate(String subId)
+    {
+        if (!this.subs.containsKey(subId)) return null;
 
-        String ret = this.head.getContent();
-        this.head = this.head.next;
+        QueueNode qn = this.subs.get(subId);
+        if (qn == null) return null;
+
+        // retrieve content and advance pointer
+        String ret = qn.getContent();
+        qn.decreaseRef();
+        this.subs.put(subId, qn.next);
+        if (qn.next != null) qn.next.increaseRef();
+
+        this.garbageCollector();
+
         return ret;
+    }
+
+    private void garbageCollector() {
+        while(this.head != null && this.head.refCount == 0)
+            this.pop();
+    }
+
+    private void pop() {
+        if (this.size == 0) return;
+        --this.size;
+        this.head = this.head.next;
     }
 
     public int size() {
@@ -40,18 +69,22 @@ public class TopicQueue {
     }
 
     public boolean sub(String subId) {
-        if (this.subs.contains(subId)) return false;
-        this.subs.add(subId);
+        if (this.isSubbed(subId)) return false;
+        this.subs.put(subId, null);
         return true;
     }
 
     public boolean unsub(String subId) {
-        if (!this.subs.contains(subId)) return false;
+        if (!this.isSubbed(subId)) return false;
+
+        QueueNode n = this.subs.get(subId);
+        if (n != null) n.decreaseRef();
+
         this.subs.remove(subId);
         return true;
     }
 
     public boolean isSubbed(String subId) {
-        return this.subs.contains(subId);
+        return this.subs.containsKey(subId);
     }
 }

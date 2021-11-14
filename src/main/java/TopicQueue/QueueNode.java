@@ -3,18 +3,28 @@ package TopicQueue;
 public class QueueNode {
     private final String content;
     protected QueueNode next;
-
-    public QueueNode(String content, QueueNode prev) {
-        this.content = content;
-        prev.next = this;
-    }
+    protected int refCount;
 
     public QueueNode(String content) {
         this.content = content;
         this.next = null;
+        this.refCount = 0;
+    }
+
+    public QueueNode(String content, QueueNode prev) {
+        this(content);
+        prev.next = this;
     }
 
     public String getContent() {
         return content;
+    }
+
+    public void increaseRef() {
+        ++this.refCount;
+    }
+
+    public void decreaseRef() {
+        --this.refCount;
     }
 }

@@ -47,22 +47,33 @@ public class Subscriber extends SocketHolder {
     }
 
     public String get(String topic) {
-        ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.GETCMD,
-                Collections.singletonList(topic)).newZMsg();
-        reqZMsg.send(this.socket);
+        String ret;
 
-        ZMsg replyZMsg = ZMsg.recvMsg(this.socket);
-        UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
-        if (!reply.getCmd().equals(GETCMD) || reply.getArg(0).equals(Proxy.ERRREPLY)) {
-            System.out.println("Get failure");
-            return null;
-        } else if (reply.getArg(0).equals(Proxy.EMPTYREPLY)) {
-            System.out.println("Get no updates yes (TODO block)");
-            return "";
+        while (true) {
+            ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.GETCMD,
+                    Collections.singletonList(topic)).newZMsg();
+            reqZMsg.send(this.socket);
+
+            ZMsg replyZMsg = ZMsg.recvMsg(this.socket);
+            UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
+            if (!reply.getCmd().equals(GETCMD) || reply.getArg(0).equals(Proxy.ERRREPLY)) {
+                System.out.println("Get failure");
+                ret = null;
+                break;
+            } else if (reply.getArg(0).equals(Proxy.EMPTYREPLY)) {
+                System.out.println("Get no updates yet (wait a bit and try again)");
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            } else {
+                ret = reply.getArg(1);
+                System.out.printf("Get success: %s\n", ret);
+                break;
+            }
         }
 
-        String ret = reply.getArg(1);
-        System.out.printf("Get success: %s\n", ret);
         return ret;
     }
 }

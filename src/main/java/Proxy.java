@@ -79,13 +79,11 @@ public class Proxy {
      * SUB <topic>
      * (success)  -----> SUB OK
      * (repetida) -----> SUB ERROR
-     *
-     * @param reqMsg
      */
     private void handleSubCmd(IdentifiedMessage reqMsg) {
         String topic = reqMsg.getArg(0);
 
-        // create queue if doesn't exist (worth storing messages now)
+        // create queue if it doesn't exist (worth storing messages now)
         TopicQueue queue;
         if (this.messageQueues.containsKey(topic)) {
             queue = this.messageQueues.get(topic);
@@ -113,8 +111,6 @@ public class Proxy {
      * UNSUB <topic>
      * (success)    -----> UNSUB OK
      * (not subbed) -----> UNSUB ERROR
-     *
-     * @param reqMsg
      */
     private void handleUnsubCmd(IdentifiedMessage reqMsg) {
         String topic = reqMsg.getArg(0);
@@ -149,8 +145,6 @@ public class Proxy {
      * GET <topic>
      * (success)    -----> GET OK <answer>
      * (not subbed) -----> GET ERROR
-     *
-     * @param reqMsg
      */
     private void handleGetCmd(IdentifiedMessage reqMsg) {
         String topic = reqMsg.getArg(0);
@@ -176,7 +170,8 @@ public class Proxy {
         }
 
         // no content to send
-        if (queue.size() == 0) {
+        String content = queue.retrieveUpdate(id);
+        if (content == null) {
             ZMsg replyZMsg = new IdentifiedMessage(reqMsg.getIdentity(),
                     Subscriber.GETCMD,
                     Collections.singletonList(Proxy.EMPTYREPLY)).newZMsg();
@@ -184,7 +179,6 @@ public class Proxy {
             return;
         }
 
-        String content = queue.pop();
         ZMsg replyZMsg = new IdentifiedMessage(reqMsg.getIdentity(),
                 Subscriber.GETCMD,
                 Arrays.asList(Proxy.OKREPLY, content)).newZMsg();
