@@ -104,7 +104,7 @@ func proxy(zctx *zmq.Context, pubPort string, subPort string) {
 					subsSet, ok := subMap[id]
 					if !ok {
 						// subscriber subs for the first time, create his dataset
-						subsSet = set.New(5)
+						subsSet = set.New()
 						subMap[id] = subsSet
 					}
 					subsSet.Add(arg)
@@ -119,7 +119,7 @@ func proxy(zctx *zmq.Context, pubPort string, subPort string) {
 					subsSet, ok := subMap[id]
 					if !ok {
 						// subscriber subs for the first time, create his dataset
-						subsSet = set.New(5)
+						subsSet = set.New()
 						subMap[id] = subsSet
 					}
 					subsSet.Remove(arg)
@@ -132,9 +132,9 @@ func proxy(zctx *zmq.Context, pubPort string, subPort string) {
 
 					subscriptions, ok := subMap[id]
 					if ok {
-						// TODO RIP performance
 						var update string
 
+						// TODO RIP performance
 						for _, subscriptionI := range subscriptions.Flatten() {
 							subscription := subscriptionI.(string)
 							q, ok := msgQueues[subscription]
