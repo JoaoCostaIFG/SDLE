@@ -12,8 +12,10 @@ public class Publisher extends SocketHolder {
 
     public boolean put(String topic, String content) {
         ZMsg zmsg = new UnidentifiedMessage(Publisher.PUTCMD, Arrays.asList(topic, content)).newZMsg();
-        if (!zmsg.send(this.socket))
+        if (!zmsg.send(this.socket)) {
+            System.out.println("Sending failure");
             return false;
+        }
         zmsg.destroy();
 
         ZMsg replyZMsg = ZMsg.recvMsg(this.socket);

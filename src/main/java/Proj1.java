@@ -1,5 +1,4 @@
 import org.zeromq.ZContext;
-import org.zeromq.ZMQ;
 
 import java.util.Random;
 
@@ -10,6 +9,33 @@ public class Proj1 {
     public Proj1(String id) {
         this.zctx = new ZContext();
         this.id = id;
+    }
+
+    public static void usage() {
+        System.out.println("Usage: <id> <role>");
+        System.exit(1);
+    }
+
+    public static void main(String[] args) {
+        if (args.length < 2) usage();
+
+        String id = args[0];
+
+        switch (args[1]) {
+            case "pub":
+                new Proj1(id).publisher("tcp://localhost:5559");
+                break;
+            case "sub":
+                new Proj1(id).subscriber("tcp://localhost:5560");
+                break;
+            case "proxy":
+                new Proj1(id).proxy(5559, 5560);
+                break;
+            default:
+                usage();
+                break;
+        }
+
     }
 
     public void destroy() {
@@ -31,6 +57,14 @@ public class Proj1 {
 
             String topic = String.format("%05d", zipcode);
             p.put(topic, String.valueOf(temperature));
+
+            /*
+            try {
+                Thread.sleep(3000);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+             */
         }
 
         //p.destroy();
@@ -69,32 +103,5 @@ public class Proj1 {
         proxy.pollSockets(this.zctx);
 
         proxy.destroy();
-    }
-
-    public static void usage() {
-        System.out.println("Usage: <id> <role>");
-        System.exit(1);
-    }
-
-    public static void main(String[] args) {
-        if (args.length < 2) usage();
-
-        String id = args[0];
-
-        switch (args[1]) {
-            case "pub":
-                new Proj1(id).publisher("tcp://localhost:5559");
-                break;
-            case "sub":
-                new Proj1(id).subscriber("tcp://localhost:5560");
-                break;
-            case "proxy":
-                new Proj1(id).proxy(5559, 5560);
-                break;
-            default:
-                usage();
-                break;
-        }
-
     }
 }

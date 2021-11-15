@@ -20,10 +20,11 @@ public class TopicQueue {
         this.subs = new HashMap<>();
     }
 
-    public void push(String content) {
+    public synchronized void push(String content) {
         if (this.size == 0) this.head = this.tail = new QueueNode(content);
         else this.tail = new QueueNode(content, this.tail);
 
+        // TODO could be optimized with a second data struct with O(1) appends
         // set next message for those that don't have any
         for (Map.Entry<String, QueueNode> e : this.subs.entrySet()) {
             if (e.getValue() == null) {
@@ -35,8 +36,7 @@ public class TopicQueue {
         ++this.size;
     }
 
-    public String retrieveUpdate(String subId)
-    {
+    public synchronized String retrieveUpdate(String subId) {
         if (!this.subs.containsKey(subId)) return null;
 
         QueueNode qn = this.subs.get(subId);
@@ -54,8 +54,9 @@ public class TopicQueue {
     }
 
     private void garbageCollector() {
-        while(this.head != null && this.head.refCount == 0)
+        while (this.head != null && this.head.refCount == 0) {
             this.pop();
+        }
     }
 
     private void pop() {
@@ -64,17 +65,17 @@ public class TopicQueue {
         this.head = this.head.next;
     }
 
-    public int size() {
+    public synchronized int size() {
         return size;
     }
 
-    public boolean sub(String subId) {
+    public synchronized boolean sub(String subId) {
         if (this.isSubbed(subId)) return false;
         this.subs.put(subId, null);
         return true;
     }
 
-    public boolean unsub(String subId) {
+    public synchronized boolean unsub(String subId) {
         if (!this.isSubbed(subId)) return false;
 
         QueueNode n = this.subs.get(subId);
@@ -84,7 +85,7 @@ public class TopicQueue {
         return true;
     }
 
-    public boolean isSubbed(String subId) {
+    public synchronized boolean isSubbed(String subId) {
         return this.subs.containsKey(subId);
     }
 }
