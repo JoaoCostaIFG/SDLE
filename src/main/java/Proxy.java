@@ -20,6 +20,7 @@ public class Proxy implements Destroyable{
     // used for internal routing
     protected static final String SUBWORKER = "WSUB";
     protected static final String PUBWORKER = "WPUB";
+    private static final int SAVERATE = 50;
 
     private Map<String, TopicQueue> messageQueues;
 
@@ -117,7 +118,7 @@ public class Proxy implements Destroyable{
                 }
             }
 
-           if(msgCounter >= 50)
+           if(msgCounter >= Proxy.SAVERATE)
            {
                exportState();
                msgCounter = 0;
