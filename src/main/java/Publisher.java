@@ -4,6 +4,7 @@ import org.zeromq.ZMsg;
 import java.util.Arrays;
 
 public class Publisher extends SocketHolder {
+
     public static final String PUTCMD = "PUT";
 
     public Publisher(ZContext zctx, String id) {

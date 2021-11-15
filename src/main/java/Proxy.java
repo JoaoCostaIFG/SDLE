@@ -2,6 +2,7 @@ import TopicQueue.TopicQueue;
 import org.zeromq.*;
 import org.zeromq.ZMQ.Socket;
 
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
@@ -9,8 +10,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
-public class Proxy {
+public class Proxy implements Destroyable{
     public static final String OKREPLY = "OK";
     public static final String ERRREPLY = "ERR";
     public static final String EMPTYREPLY = "EMPTY";
@@ -19,7 +21,7 @@ public class Proxy {
     protected static final String SUBWORKER = "WSUB";
     protected static final String PUBWORKER = "WPUB";
 
-    private final Map<String, TopicQueue> messageQueues;
+    private Map<String, TopicQueue> messageQueues;
 
     private final ZContext zctx;
 
@@ -36,7 +38,14 @@ public class Proxy {
 
     public Proxy(ZContext zctx) {
         this.zctx = zctx;
-        this.messageQueues = new ConcurrentHashMap<>();
+
+        try {
+            FileInputStream state = new FileInputStream("state");
+            ObjectInputStream ois = new ObjectInputStream(state);
+            this.messageQueues = (ConcurrentHashMap)ois.readObject();
+        } catch (Exception e) {
+            this.messageQueues = new ConcurrentHashMap<>();
+        }
 
         // yar har fiddle dee dee! (Simple Pirate Pattern)
         this.pubSocket = zctx.createSocket(SocketType.ROUTER);
@@ -58,6 +67,7 @@ public class Proxy {
         }
     }
 
+    @Override
     public void destroy() {
         this.pubSocket.close();
         this.subSocket.close();
@@ -77,16 +87,20 @@ public class Proxy {
         poller.register(this.subSocket, ZMQ.Poller.POLLIN);
         poller.register(this.workersPull, ZMQ.Poller.POLLIN);
 
+        int msgCounter = 0;
+
         while (true) {
             poller.poll();
             // publishers
             if (poller.pollin(0)) {
+                ++msgCounter;
                 ZMsg zMsg = ZMsg.recvMsg(this.pubSocket);
                 zMsg.addLast(Proxy.PUBWORKER);
                 zMsg.send(this.workersPush);
             }
             // subscribers
             if (poller.pollin(1)) {
+                ++msgCounter;
                 ZMsg zMsg = ZMsg.recvMsg(this.subSocket);
                 System.out.println(zMsg);
                 zMsg.addLast(Proxy.SUBWORKER);
@@ -94,6 +108,7 @@ public class Proxy {
             }
             // workers
             if (poller.pollin(2)) {
+                ++msgCounter;
                 ZMsg zMsg = ZMsg.recvMsg(this.workersPull);
                 String route = zMsg.removeLast().getString(StandardCharsets.UTF_8);
                 switch (route) {
@@ -101,7 +116,25 @@ public class Proxy {
                     case Proxy.SUBWORKER -> zMsg.send(this.subSocket);
                 }
             }
+
+           if(msgCounter >= 50)
+           {
+               exportState();
+               msgCounter = 0;
+           }
         }
+    }
+
+    private void exportState()
+    {
+        try {
+            FileOutputStream fos = new FileOutputStream("state");
+            ObjectOutputStream oos = new ObjectOutputStream(fos);
+            oos.writeObject(this.messageQueues);
+            oos.close();
+            fos.close();
+        }
+        catch(Exception e){}
     }
 
     /**

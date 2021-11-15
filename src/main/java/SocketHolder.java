@@ -4,7 +4,7 @@ import org.zeromq.ZMQ;
 
 import java.nio.charset.StandardCharsets;
 
-public abstract class SocketHolder {
+public abstract class SocketHolder implements Destroyable {
     protected ZMQ.Socket socket;
 
     public SocketHolder(ZContext zctx, String id) {
@@ -12,6 +12,7 @@ public abstract class SocketHolder {
         this.socket.setIdentity(id.getBytes(StandardCharsets.UTF_8));
     }
 
+    @Override
     public void destroy() {
         this.socket.close();
     }

@@ -1,9 +1,10 @@
 package TopicQueue;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
-public class TopicQueue {
+public class TopicQueue implements Serializable {
     // people that subscribed to this queue
     private final Map<String, QueueNode> subs;
     // first node

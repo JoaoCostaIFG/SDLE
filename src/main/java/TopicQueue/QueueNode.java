@@ -1,6 +1,8 @@
 package TopicQueue;
 
-public class QueueNode {
+import java.io.Serializable;
+
+public class QueueNode implements Serializable {
     private final String content;
     protected QueueNode next;
     protected int refCount;

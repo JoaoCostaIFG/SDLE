@@ -3,7 +3,7 @@ import org.zeromq.ZMsg;
 
 import java.util.Collections;
 
-public class Subscriber extends SocketHolder {
+public class Subscriber extends SocketHolder{
     public static final String GETCMD = "GET";
     public static final String SUBCMD = "SUB";
     public static final String UNSUBCMD = "UNSUB";
@@ -25,7 +25,7 @@ public class Subscriber extends SocketHolder {
             System.out.println("Sub success");
             return true;
         } else {
-            System.out.println("Sub failure");
+            System.out.println("Sub failure - Already Subbed");
             return false;
         }
     }
