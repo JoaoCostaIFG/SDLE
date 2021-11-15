@@ -16,8 +16,8 @@ public class Proxy {
     public static final String EMPTYREPLY = "EMPTY";
 
     // used for internal routing
-    private static final String SUBWORKER = "WSUB";
-    private static final String PUBWORKER = "WPUB";
+    protected static final String SUBWORKER = "WSUB";
+    protected static final String PUBWORKER = "WPUB";
 
     private final Map<String, TopicQueue> messageQueues;
 
@@ -26,11 +26,13 @@ public class Proxy {
     private final Socket pubSocket;
     private final Socket subSocket;
 
-    private final String workersEndpoint = "inproc://workers";
-    private final Socket workersDealer;
+    private final String workersPushEndpoint = "inproc://workersPush";
+    private final String workersPullEndpoint = "inproc://workersPull";
 
-    private final ExecutorService pubThreadPool;
-    private final ExecutorService subThreadPool;
+    private final Socket workersPush;
+    private final Socket workersPull;
+
+    private final ExecutorService workerThreadPool;
 
     public Proxy(ZContext zctx) {
         this.zctx = zctx;
@@ -41,20 +43,26 @@ public class Proxy {
         this.subSocket = zctx.createSocket(SocketType.ROUTER);
 
         // internal communication between threads to distribute work
-        this.workersDealer = zctx.createSocket(SocketType.DEALER);
-        this.workersDealer.bind(this.workersEndpoint);
+        this.workersPush = zctx.createSocket(SocketType.PUSH);
+        this.workersPush.bind(this.workersPushEndpoint);
+
+        this.workersPull = zctx.createSocket(SocketType.PULL);
+        this.workersPull.bind(this.workersPullEndpoint);
 
         int maxThreads = Runtime.getRuntime().availableProcessors() + 1;
-        this.pubThreadPool = Executors.newFixedThreadPool(maxThreads / 2);
-        this.subThreadPool = Executors.newFixedThreadPool((int) Math.ceil(maxThreads / 2.0));
+        this.workerThreadPool = Executors.newFixedThreadPool(maxThreads);
+
+        for (int i = 0; i < maxThreads; ++i) {
+            this.workerThreadPool.execute(new ProxyWorker(this.zctx, this.workersPushEndpoint,
+                    this.workersPullEndpoint, this));
+        }
     }
 
     public void destroy() {
         this.pubSocket.close();
         this.subSocket.close();
 
-        this.pubThreadPool.shutdownNow();
-        this.subThreadPool.shutdownNow();
+        this.workerThreadPool.shutdownNow();
     }
 
     public boolean bind(int pubPort, int subPort) {
@@ -67,81 +75,41 @@ public class Proxy {
         ZMQ.Poller poller = zctx.createPoller(3);
         poller.register(this.pubSocket, ZMQ.Poller.POLLIN);
         poller.register(this.subSocket, ZMQ.Poller.POLLIN);
-        poller.register(this.workersDealer, ZMQ.Poller.POLLIN);
+        poller.register(this.workersPull, ZMQ.Poller.POLLIN);
 
         while (true) {
             poller.poll();
             // publishers
             if (poller.pollin(0)) {
                 ZMsg zMsg = ZMsg.recvMsg(this.pubSocket);
-                //zMsg.addLast(Proxy.PUBWORKER);
-                this.pubThreadPool.execute(this::spawnWorker);
-                try {
-                    Thread.sleep(500);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                zMsg.send(this.workersDealer);
+                zMsg.addLast(Proxy.PUBWORKER);
+                zMsg.send(this.workersPush);
             }
             // subscribers
             if (poller.pollin(1)) {
                 ZMsg zMsg = ZMsg.recvMsg(this.subSocket);
+                System.out.println(zMsg);
                 zMsg.addLast(Proxy.SUBWORKER);
-                this.subThreadPool.execute(this::spawnWorker);
-                zMsg.send(this.workersDealer);
+                zMsg.send(this.workersPush);
             }
             // workers
             if (poller.pollin(2)) {
-                ZMsg zMsg = ZMsg.recvMsg(this.workersDealer);
-                zMsg.send(this.pubSocket);
-                /*
+                ZMsg zMsg = ZMsg.recvMsg(this.workersPull);
                 String route = zMsg.removeLast().getString(StandardCharsets.UTF_8);
                 switch (route) {
                     case Proxy.PUBWORKER -> zMsg.send(this.pubSocket);
                     case Proxy.SUBWORKER -> zMsg.send(this.subSocket);
                 }
-                 */
             }
         }
-    }
-
-    private void spawnWorker() {
-        Socket repSocket = this.zctx.createSocket(SocketType.REP);
-        repSocket.setHWM(1);
-        repSocket.connect(this.workersEndpoint);
-        ZMsg zMsg = ZMsg.recvMsg(repSocket);
-
-        /*
-        ZMsg replyZMsg;
-        ZFrame target = zMsg.removeLast();
-        switch (target.toString()) {
-            case Proxy.PUBWORKER -> {
-                replyZMsg = this.handlePublisher(zMsg);
-                replyZMsg.addLast(target);
-            }
-            case Proxy.SUBWORKER -> {
-                replyZMsg = this.handleSubscriber(zMsg);
-                replyZMsg.addLast(target);
-            }
-            default -> {
-                System.out.println("Worker found some weird stuff");
-                return;
-            }
-        }
-         */
-
-        ZMsg replyZMsg = this.handlePublisher(zMsg);
-
-        replyZMsg.send(repSocket);
-        repSocket.close();
     }
 
     /**
      * PUT <topic> <update>
      * (success) -----> PUT OK
      */
-    private ZMsg handlePublisher(ZMsg zMsg) {
-        UnidentifiedMessage reqMsg = new UnidentifiedMessage(zMsg);
+    protected ZMsg handlePublisher(ZMsg zMsg) {
+        IdentifiedMessage reqMsg = new IdentifiedMessage(zMsg);
         String topic = reqMsg.getArg(0);
         String update = reqMsg.getArg(1);
         System.out.printf("Pub (%s) %s - %s\n", reqMsg.getCmd(), topic, update);
@@ -153,7 +121,7 @@ public class Proxy {
             queue.push(update);
         }
 
-        return new UnidentifiedMessage(Publisher.PUTCMD,
+        return new IdentifiedMessage(reqMsg.getIdentity(), Publisher.PUTCMD,
                 Collections.singletonList(Proxy.OKREPLY)).newZMsg();
     }
 
@@ -180,10 +148,10 @@ public class Proxy {
         }
 
         if (subSuccess) {
-            return new UnidentifiedMessage(Subscriber.SUBCMD,
+            return new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.SUBCMD,
                     Collections.singletonList(Proxy.OKREPLY)).newZMsg();
         }
-        return new UnidentifiedMessage(Subscriber.SUBCMD,
+        return new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.SUBCMD,
                 Collections.singletonList(Proxy.ERRREPLY)).newZMsg();
     }
 
@@ -226,7 +194,7 @@ public class Proxy {
 
         // if queue doesn't exist => no one has subscribed (including you)
         if (!this.messageQueues.containsKey(topic)) {
-            return new UnidentifiedMessage(Subscriber.GETCMD,
+            return new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.GETCMD,
                     Collections.singletonList(Proxy.ERRREPLY)).newZMsg();
         }
 
@@ -236,23 +204,26 @@ public class Proxy {
 
         String id = reqMsg.getIdentityStr();
         if (!queue.isSubbed(id)) {
-            return new UnidentifiedMessage(Subscriber.GETCMD,
+            return new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.GETCMD,
                     Collections.singletonList(Proxy.ERRREPLY)).newZMsg();
         }
 
         // no content to send
         String content = queue.retrieveUpdate(id);
         if (content == null) {
-            return new UnidentifiedMessage(
+            return new IdentifiedMessage(
+                    reqMsg.getIdentity(),
                     Subscriber.GETCMD,
                     Collections.singletonList(Proxy.EMPTYREPLY)).newZMsg();
         }
 
-        return new UnidentifiedMessage(Subscriber.GETCMD,
+        return new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.GETCMD,
                 Arrays.asList(Proxy.OKREPLY, content)).newZMsg();
     }
 
-    private ZMsg handleSubscriber(ZMsg zMsg) {
+    protected ZMsg handleSubscriber(ZMsg zMsg) {
+        System.out.println(zMsg);
+
         IdentifiedMessage reqMsg = new IdentifiedMessage(zMsg);
         System.out.printf("Sub (%s)\n", reqMsg.getCmd());
 
@@ -260,7 +231,7 @@ public class Proxy {
             case Subscriber.SUBCMD -> this.handleSubCmd(reqMsg);
             case Subscriber.UNSUBCMD -> this.handleUnsubCmd(reqMsg);
             case Subscriber.GETCMD -> this.handleGetCmd(reqMsg);
-            default -> new UnidentifiedMessage(Subscriber.GETCMD,
+            default -> new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.GETCMD,
                     Collections.singletonList(Proxy.ERRREPLY)).newZMsg();
         };
     }

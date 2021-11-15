@@ -18,6 +18,7 @@ public class Subscriber extends SocketHolder {
         reqZMsg.send(this.socket);
 
         ZMsg replyZMsg = ZMsg.recvMsg(this.socket);
+        System.out.println(replyZMsg);
         UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
         if (reply.getCmd().equals(SUBCMD) &&
                 reply.getArg(0).equals(Proxy.OKREPLY)) {
