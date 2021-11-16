@@ -7,8 +7,8 @@ public class Publisher extends SocketHolder {
 
     public static final String PUTCMD = "PUT";
 
-    public Publisher(ZContext zctx, String id) {
-        super(zctx, id);
+    public Publisher(ZContext zctx, String id, String endpoint) {
+        super(zctx, id, endpoint);
     }
 
     public boolean put(String topic, String content) {

@@ -53,10 +53,10 @@ public class Proj1 {
     }
 
     public void publisher(String endpoint) {
-        Publisher p = new Publisher(this.zctx, this.id);
+        Publisher p = new Publisher(this.zctx, this.id, endpoint);
         this.destroyables.add(p);
 
-        if (!p.connect(endpoint)) {
+        if (!p.connect()) {
             p.destroy();
             return;
         }
@@ -75,11 +75,11 @@ public class Proj1 {
     }
 
     private void subscriber(String endpoint) {
-        Subscriber s = new Subscriber(this.zctx, this.id);
+        Subscriber s = new Subscriber(this.zctx, this.id, endpoint);
         this.destroyables.add(s);
 
 
-        if (!s.connect(endpoint)) {
+        if (!s.connect()) {
             s.destroy();
             return;
         }

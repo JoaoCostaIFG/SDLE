@@ -8,17 +8,20 @@ public class Subscriber extends SocketHolder{
     public static final String SUBCMD = "SUB";
     public static final String UNSUBCMD = "UNSUB";
 
-    public Subscriber(ZContext zctx, String id) {
-        super(zctx, id);
+    public Subscriber(ZContext zctx, String id, String endpoint) {
+        super(zctx, id, endpoint);
     }
 
     public boolean subscribe(String topic) {
-        ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.SUBCMD,
-                Collections.singletonList(topic)).newZMsg();
-        reqZMsg.send(this.socket);
+        ZMsg replyZMsg = null;
 
-        ZMsg replyZMsg = ZMsg.recvMsg(this.socket);
-        System.out.println(replyZMsg);
+        while(replyZMsg == null) {
+            ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.SUBCMD,
+                Collections.singletonList(topic)).newZMsg();
+            reqZMsg.send(this.socket);
+            replyZMsg = this.receiveMsg();
+        }
+
         UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
         if (reply.getCmd().equals(SUBCMD) &&
                 reply.getArg(0).equals(Proxy.OKREPLY)) {
@@ -31,11 +34,17 @@ public class Subscriber extends SocketHolder{
     }
 
     public boolean unsubscribe(String topic) {
-        ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.UNSUBCMD,
-                Collections.singletonList(topic)).newZMsg();
-        reqZMsg.send(this.socket);
+        ZMsg replyZMsg = null;
 
-        ZMsg replyZMsg = ZMsg.recvMsg(this.socket);
+        while(replyZMsg == null) {
+
+            ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.UNSUBCMD,
+                    Collections.singletonList(topic)).newZMsg();
+            reqZMsg.send(this.socket);
+
+            replyZMsg = this.receiveMsg();
+        }
+
         UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
         if (reply.getCmd().equals(UNSUBCMD) &&
                 reply.getArg(0).equals(Proxy.OKREPLY)) {
@@ -51,11 +60,14 @@ public class Subscriber extends SocketHolder{
         String ret;
 
         while (true) {
-            ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.GETCMD,
-                    Collections.singletonList(topic)).newZMsg();
-            reqZMsg.send(this.socket);
+            ZMsg replyZMsg = null;
+            while(replyZMsg==null) {
+                ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.GETCMD,
+                        Collections.singletonList(topic)).newZMsg();
+                reqZMsg.send(this.socket);
 
-            ZMsg replyZMsg = ZMsg.recvMsg(this.socket);
+                replyZMsg = this.receiveMsg();
+            }
             UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
             if (!reply.getCmd().equals(GETCMD) || reply.getArg(0).equals(Proxy.ERRREPLY)) {
                 System.out.println("Get failure");
