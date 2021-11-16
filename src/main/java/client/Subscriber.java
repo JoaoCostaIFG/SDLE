@@ -1,9 +1,13 @@
+package client;
+
+import message.UnidentifiedMessage;
 import org.zeromq.ZContext;
 import org.zeromq.ZMsg;
+import proxy.Proxy;
 
 import java.util.Collections;
 
-public class Subscriber extends SocketHolder{
+public class Subscriber extends SocketHolder {
     public static final String GETCMD = "GET";
     public static final String SUBCMD = "SUB";
     public static final String UNSUBCMD = "UNSUB";
@@ -39,10 +43,8 @@ public class Subscriber extends SocketHolder{
         UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
         if (reply.getCmd().equals(UNSUBCMD) &&
                 reply.getArg(0).equals(Proxy.OKREPLY)) {
-            System.out.println("Unsub success");
             return true;
         } else {
-            System.out.println("Unsub failure");
             return false;
         }
     }
@@ -70,7 +72,6 @@ public class Subscriber extends SocketHolder{
                 }
             } else {
                 ret = reply.getArg(1);
-                System.out.printf("Get success: %s\n", ret);
                 break;
             }
         }

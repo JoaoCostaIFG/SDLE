@@ -1,3 +1,6 @@
+package client;
+
+import destroyable.Destroyable;
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;

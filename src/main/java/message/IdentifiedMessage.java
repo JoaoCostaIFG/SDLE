@@ -1,3 +1,5 @@
+package message;
+
 import org.zeromq.ZFrame;
 import org.zeromq.ZMsg;
 

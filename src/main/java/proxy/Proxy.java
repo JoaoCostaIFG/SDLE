@@ -1,8 +1,20 @@
-import TopicQueue.TopicQueue;
-import org.zeromq.*;
-import org.zeromq.ZMQ.Socket;
+package proxy;
 
-import java.io.*;
+import client.Publisher;
+import client.Subscriber;
+import destroyable.Destroyable;
+import message.IdentifiedMessage;
+import org.zeromq.SocketType;
+import org.zeromq.ZContext;
+import org.zeromq.ZMQ;
+import org.zeromq.ZMQ.Socket;
+import org.zeromq.ZMsg;
+import proxy.TopicQueue.TopicQueue;
+
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
@@ -10,9 +22,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
 
-public class Proxy implements Destroyable{
+public class Proxy implements Destroyable {
     public static final String OKREPLY = "OK";
     public static final String ERRREPLY = "ERR";
     public static final String EMPTYREPLY = "EMPTY";
@@ -43,7 +54,7 @@ public class Proxy implements Destroyable{
         try {
             FileInputStream state = new FileInputStream("state");
             ObjectInputStream ois = new ObjectInputStream(state);
-            this.messageQueues = (ConcurrentHashMap)ois.readObject();
+            this.messageQueues = (ConcurrentHashMap) ois.readObject();
         } catch (Exception e) {
             this.messageQueues = new ConcurrentHashMap<>();
         }
@@ -118,24 +129,22 @@ public class Proxy implements Destroyable{
                 }
             }
 
-           if(msgCounter >= Proxy.SAVERATE)
-           {
-               exportState();
-               msgCounter = 0;
-           }
+            if (msgCounter >= Proxy.SAVERATE) {
+                exportState();
+                msgCounter = 0;
+            }
         }
     }
 
-    private void exportState()
-    {
+    private void exportState() {
         try {
             FileOutputStream fos = new FileOutputStream("state");
             ObjectOutputStream oos = new ObjectOutputStream(fos);
             oos.writeObject(this.messageQueues);
             oos.close();
             fos.close();
+        } catch (Exception e) {
         }
-        catch(Exception e){}
     }
 
     /**

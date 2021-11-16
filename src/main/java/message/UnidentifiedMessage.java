@@ -1,3 +1,5 @@
+package message;
+
 import org.zeromq.ZMsg;
 
 import java.util.ArrayList;

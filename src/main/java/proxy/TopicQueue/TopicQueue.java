@@ -1,4 +1,4 @@
-package TopicQueue;
+package proxy.TopicQueue;
 
 import java.io.Serializable;
 import java.util.HashMap;

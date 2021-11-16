@@ -1,13 +1,12 @@
+package proxy;
+
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZFrame;
 import org.zeromq.ZMQ.Socket;
 import org.zeromq.ZMsg;
-import zmq.socket.reqrep.Rep;
 
-import java.awt.*;
-
-public class ProxyWorker implements Runnable{
+public class ProxyWorker implements Runnable {
 
     Socket pushSock;
     Socket pullSock;
@@ -27,8 +26,7 @@ public class ProxyWorker implements Runnable{
 
     @Override
     public void run() {
-        while(!Thread.interrupted())
-        {
+        while (!Thread.interrupted()) {
             ZMsg zMsg = ZMsg.recvMsg(this.pullSock);
 
             System.out.println(zMsg);
@@ -55,7 +53,6 @@ public class ProxyWorker implements Runnable{
         this.pullSock.close();
 
     }
-
 
 
 }

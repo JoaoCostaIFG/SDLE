@@ -5,12 +5,15 @@ proxy: compile
 	mvn exec:java -Dexec.mainClass=Proj1 -Dexec.args="id1 proxy"
 
 pub: compile
-	mvn exec:java -Dexec.mainClass=Proj1 -Dexec.args="id2 pub"
+	mvn exec:java -Dexec.mainClass=Proj1 -Dexec.args="id2 put bazinga 10"
+
+pub2: compile
+	mvn exec:java -Dexec.mainClass=Proj1 -Dexec.args="id2 put babide 10"
 
 sub: compile
-	mvn exec:java -Dexec.mainClass=Proj1 -Dexec.args="id3 sub"
+	mvn exec:java -Dexec.mainClass=Proj1 -Dexec.args="id3 get bazinga"
 
 sub2: compile
-	mvn exec:java -Dexec.mainClass=Proj1 -Dexec.args="id4 sub"
+	mvn exec:java -Dexec.mainClass=Proj1 -Dexec.args="id4 get babide 5"
 
 .PHONY: compile proxy pub sub

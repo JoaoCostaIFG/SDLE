@@ -1,10 +1,19 @@
+import client.Publisher;
+import client.Subscriber;
+import destroyable.Destroyable;
 import org.zeromq.ZContext;
+import proxy.Proxy;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
 public class Proj1 {
+    private static final int PUBPORT = 5559;
+    private static final int SUBPORT = 5560;
+    private static final String PUBENDPOINT="tcp://localhost:" + PUBPORT;
+    private static final String SUBENDPOINT="tcp://localhost:" + SUBPORT;
+
     ZContext zctx;
     String id;
     List<Destroyable> destroyables = new ArrayList<>();
@@ -15,7 +24,7 @@ public class Proj1 {
     }
 
     public static void usage() {
-        System.out.println("Usage: <id> <role>");
+        System.out.println("Usage: <id> <put|get|proxy> [arg1 [arg2]]");
         System.exit(1);
     }
 
@@ -27,11 +36,18 @@ public class Proj1 {
         Runtime.getRuntime().addShutdownHook(new Thread(p1::destroy));
 
         switch (args[1]) {
-            case "pub":
-                p1.publisher("tcp://localhost:5559");
+            case "put":
+                if (args.length != 4) usage();
+                p1.doput(Proj1.PUBENDPOINT, args[2], Integer.parseInt(args[3]));
                 break;
-            case "sub":
-                p1.subscriber("tcp://localhost:5560");
+            case "get":
+                if (args.length == 3) {
+                    p1.doget(Proj1.SUBENDPOINT, args[2]);
+                }else if (args.length == 4){
+                    p1.doget(Proj1.SUBENDPOINT, args[2], Integer.parseInt(args[3]));
+                }else {
+                    usage();
+                }
                 break;
             case "proxy":
                 p1.proxy(5559, 5560);
@@ -40,65 +56,58 @@ public class Proj1 {
                 usage();
                 break;
         }
-
     }
 
     public void destroy() {
         this.zctx.close();
 
-        for(Destroyable d : this.destroyables)
-        {
+        for (Destroyable d : this.destroyables) {
             d.destroy();
         }
     }
 
-    public void publisher(String endpoint) {
+    public void doput(String endpoint, String topic, int n) {
         Publisher p = new Publisher(this.zctx, this.id);
         this.destroyables.add(p);
 
         if (!p.connect(endpoint)) {
-            p.destroy();
+            System.err.printf("Failed connection to: %s\n", endpoint);
             return;
         }
 
         Random srandom = new Random(System.currentTimeMillis());
-        for (; true; ) {
-            int zipcode, temperature;
-            zipcode = 10000 + srandom.nextInt(10);
-            temperature = srandom.nextInt(50) - 20 + 1;
-
-            String topic = String.format("%05d", zipcode);
+        for (int i = 0; i < n; ++i) {
+            int temperature = srandom.nextInt(50) - 20;
             p.put(topic, String.valueOf(temperature));
-
         }
-
     }
 
-    private void subscriber(String endpoint) {
+    private void doget(String endpoint, String topic, int n) {
         Subscriber s = new Subscriber(this.zctx, this.id);
         this.destroyables.add(s);
 
-
         if (!s.connect(endpoint)) {
-            s.destroy();
+            System.err.printf("Failed connection to: %s\n", endpoint);
             return;
         }
 
-        String topic = "10001";
-        s.subscribe(topic);
-
-
-        for (; true; ) {
-            String update = s.get(topic);
-
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+        if(!s.subscribe(topic)) {
+            System.err.printf("Failed to sub: %s\n", topic);
+            return;
         }
 
-        //s.destroy();
+        for (int i = 0; i < n || n < 0; ++i) {
+            String update = s.get(topic);
+            System.out.printf("Get (%s): %s\n", topic, update);
+        }
+
+        if(!s.unsubscribe(topic)) {
+            System.err.printf("Failed to unsub: %s\n", topic);
+        }
+    }
+
+    private void doget(String endpoint, String topic) {
+        this.doget(endpoint, topic, -1);
     }
 
     public void proxy(int pubPort, int subPort) {

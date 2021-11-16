@@ -1,5 +1,9 @@
+package client;
+
+import message.UnidentifiedMessage;
 import org.zeromq.ZContext;
 import org.zeromq.ZMsg;
+import proxy.Proxy;
 
 import java.util.Arrays;
 
