@@ -7,7 +7,6 @@ import org.zeromq.ZMQ.Socket;
 import org.zeromq.ZMsg;
 
 public class ProxyWorker implements Runnable {
-
     Socket pushSock;
     Socket pullSock;
 
@@ -23,13 +22,16 @@ public class ProxyWorker implements Runnable {
         this.parent = parent;
     }
 
-
     @Override
     public void run() {
         while (!Thread.interrupted()) {
-            ZMsg zMsg = ZMsg.recvMsg(this.pullSock);
+            ZMsg zMsg;
+            try {
+                zMsg = ZMsg.recvMsg(this.pullSock);
+            } catch (Exception ignored) {
+                continue;
+            }
 
-            System.out.println(zMsg);
             ZMsg replyZMsg;
             ZFrame target = zMsg.removeLast();
             switch (target.toString()) {
@@ -49,10 +51,8 @@ public class ProxyWorker implements Runnable {
 
             replyZMsg.send(this.pushSock);
         }
+
         this.pushSock.close();
         this.pullSock.close();
-
     }
-
-
 }

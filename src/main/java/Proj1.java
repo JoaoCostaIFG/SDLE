@@ -11,8 +11,8 @@ import java.util.Random;
 public class Proj1 {
     private static final int PUBPORT = 5559;
     private static final int SUBPORT = 5560;
-    private static final String PUBENDPOINT="tcp://localhost:" + PUBPORT;
-    private static final String SUBENDPOINT="tcp://localhost:" + SUBPORT;
+    private static final String PUBENDPOINT = "tcp://localhost:" + PUBPORT;
+    private static final String SUBENDPOINT = "tcp://localhost:" + SUBPORT;
 
     ZContext zctx;
     String id;
@@ -43,9 +43,9 @@ public class Proj1 {
             case "get":
                 if (args.length == 3) {
                     p1.doget(Proj1.SUBENDPOINT, args[2]);
-                }else if (args.length == 4){
+                } else if (args.length == 4) {
                     p1.doget(Proj1.SUBENDPOINT, args[2], Integer.parseInt(args[3]));
-                }else {
+                } else {
                     usage();
                 }
                 break;
@@ -59,11 +59,11 @@ public class Proj1 {
     }
 
     public void destroy() {
-        this.zctx.close();
-
         for (Destroyable d : this.destroyables) {
             d.destroy();
         }
+
+        this.zctx.close();
     }
 
     public void doput(String endpoint, String topic, int n) {
@@ -91,7 +91,7 @@ public class Proj1 {
             return;
         }
 
-        if(!s.subscribe(topic)) {
+        if (!s.subscribe(topic)) {
             System.err.printf("Failed to sub: %s\n", topic);
             return;
         }
@@ -101,7 +101,7 @@ public class Proj1 {
             System.out.printf("Get (%s): %s\n", topic, update);
         }
 
-        if(!s.unsubscribe(topic)) {
+        if (!s.unsubscribe(topic)) {
             System.err.printf("Failed to unsub: %s\n", topic);
         }
     }

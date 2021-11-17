@@ -32,21 +32,15 @@ public class Proxy implements Destroyable {
     protected static final String SUBWORKER = "WSUB";
     protected static final String PUBWORKER = "WPUB";
     private static final int SAVERATE = 50;
-
-    private Map<String, TopicQueue> messageQueues;
-
     private final ZContext zctx;
-
     private final Socket pubSocket;
     private final Socket subSocket;
-
     private final String workersPushEndpoint = "inproc://workersPush";
     private final String workersPullEndpoint = "inproc://workersPull";
-
     private final Socket workersPush;
     private final Socket workersPull;
-
     private final ExecutorService workerThreadPool;
+    private Map<String, TopicQueue> messageQueues;
 
     public Proxy(ZContext zctx) {
         this.zctx = zctx;
@@ -84,7 +78,7 @@ public class Proxy implements Destroyable {
         this.pubSocket.close();
         this.subSocket.close();
 
-        this.workerThreadPool.shutdownNow();
+        this.workerThreadPool.shutdown();
     }
 
     public boolean bind(int pubPort, int subPort) {
@@ -102,7 +96,12 @@ public class Proxy implements Destroyable {
         int msgCounter = 0;
 
         while (true) {
-            poller.poll();
+            try {
+                poller.poll();
+            } catch (Exception ignored) {
+                return;
+            }
+
             // publishers
             if (poller.pollin(0)) {
                 ++msgCounter;
