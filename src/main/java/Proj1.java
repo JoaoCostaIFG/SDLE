@@ -8,7 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-public class Proj1 {
+public class Proj1 extends Thread {
     private static final int PUBPORT = 5559;
     private static final int SUBPORT = 5560;
     private static final String PUBENDPOINT = "tcp://localhost:" + PUBPORT;
@@ -23,6 +23,23 @@ public class Proj1 {
         this.id = id;
     }
 
+    /**
+     * This is a work-around for Java's shutdown hook. The ZContext needs
+     * to be destroyed on the Thread it was created on.
+     */
+    @Override
+    public void start() {
+        System.err.println("Shutting down");
+
+        this.zctx.destroy();
+        System.err.println("Closed context");
+
+        System.err.println("Waiting destroyables");
+        for (Destroyable d : this.destroyables) {
+            d.destroy();
+        }
+    }
+
     public static void usage() {
         System.out.println("Usage: <id> <put|get|proxy> [arg1 [arg2]]");
         System.exit(1);
@@ -33,7 +50,7 @@ public class Proj1 {
 
         String id = args[0];
         Proj1 p1 = new Proj1(id);
-        Runtime.getRuntime().addShutdownHook(new Thread(p1::destroy));
+        Runtime.getRuntime().addShutdownHook(p1);
 
         switch (args[1]) {
             case "put":
@@ -56,17 +73,8 @@ public class Proj1 {
                 usage();
                 break;
         }
-    }
 
-    public void destroy() {
-        this.zctx.close();
-        System.err.println("Closed context");
-
-        System.err.println("Waiting destroyables");
-        for (Destroyable d : this.destroyables) {
-            d.destroy();
-        }
-        System.err.println("Waited destroyables");
+        System.exit(0);
     }
 
     public void doput(String endpoint, String topic, int n) {
@@ -74,7 +82,7 @@ public class Proj1 {
         this.destroyables.add(p);
 
         if (!p.connect(endpoint)) {
-            System.err.printf("Failed connection to: %s\n", endpoint);
+            System.err.printf("Failed connection to proxy: [endpoint=%s]\n", endpoint);
             return;
         }
 
@@ -83,11 +91,12 @@ public class Proj1 {
             int temperature = srandom.nextInt(50) - 20;
             try {
                 if (!p.put(topic, String.valueOf(temperature))) {
-                    System.err.println("Put failed");
+                    System.err.println("Put failed. Try again...");
                 } else {
-                    System.out.printf("Put (%s): %s\n", topic, temperature);
+                    System.out.printf("Published a topic update: [topic=%s], [update=%s]\n", topic, temperature);
                 }
             } catch (Exception e) {
+                System.err.println("Socket exception. Closing..");
                 return;
             }
         }
@@ -98,17 +107,15 @@ public class Proj1 {
         this.destroyables.add(s);
 
         if (!s.connect(endpoint)) {
-            System.err.printf("Failed connection to: %s\n", endpoint);
+            System.err.printf("Failed connection to endpint: [endpoint=%s]\n", endpoint);
             return;
         }
 
         try {
-            System.out.println("sub");
             if (!s.subscribe(topic)) {
-                System.err.printf("Failed to sub: %s\n", topic);
+                System.err.printf("Failed to sub topic: [topic=%s]\n", topic);
                 return;
             }
-            System.out.println("sub");
         } catch (Exception e) {
             return;
         }
@@ -119,7 +126,7 @@ public class Proj1 {
                 if (update == null) {
                     System.err.println("Get failed");
                 } else {
-                    System.out.printf("Get (%s): %s\n", topic, update);
+                    System.out.printf("Got topic update: [topic=%s], [update=%s]\n", topic, update);
                 }
             } catch (Exception e) {
                 return;
@@ -128,7 +135,7 @@ public class Proj1 {
 
         try {
             if (!s.unsubscribe(topic)) {
-                System.err.printf("Failed to unsub: %s\n", topic);
+                System.err.printf("Failed to unsub topic: [topic=%s]\n", topic);
             }
         } catch (Exception ignored) {
         }

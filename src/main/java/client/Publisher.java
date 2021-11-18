@@ -15,7 +15,7 @@ public class Publisher extends SocketHolder {
         super(zctx, id);
     }
 
-    public boolean put(String topic, String content) throws Exception{
+    public boolean put(String topic, String content) throws Exception {
         ZMsg zmsg = new UnidentifiedMessage(Publisher.PUTCMD, Arrays.asList(topic, content)).newZMsg();
         if (!zmsg.send(this.socket)) {
             return false;

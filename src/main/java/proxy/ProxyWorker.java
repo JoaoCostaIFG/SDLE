@@ -1,7 +1,11 @@
 package proxy;
 
-import org.zeromq.*;
+import org.zeromq.SocketType;
+import org.zeromq.ZContext;
+import org.zeromq.ZFrame;
 import org.zeromq.ZMQ.Socket;
+import org.zeromq.ZMsg;
+import zmq.ZError;
 
 public class ProxyWorker implements Runnable {
     Socket pushSock;
@@ -46,10 +50,8 @@ public class ProxyWorker implements Runnable {
 
                 replyZMsg.send(this.pushSock);
             }
-        } catch (ZMQException ignored) {
+        } catch (Exception e) {
+            System.err.println("Worker terminated");
         }
-
-        this.pushSock.close();
-        this.pullSock.close();
     }
 }

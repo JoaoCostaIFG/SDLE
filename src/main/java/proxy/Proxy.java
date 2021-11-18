@@ -10,6 +10,7 @@ import org.zeromq.ZMQ;
 import org.zeromq.ZMQ.Socket;
 import org.zeromq.ZMsg;
 import proxy.TopicQueue.TopicQueue;
+import zmq.ZError;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -75,25 +76,18 @@ public class Proxy implements Destroyable {
 
     @Override
     public void destroy() {
-        this.pubSocket.close();
-        this.subSocket.close();
-        this.workersPush.close();
-        this.workersPull.close();
-        System.err.println("Closed sockets");
-
-        System.err.println("Waiting workers");
-        for (Thread t:this.workers) {
+        for (Thread t : this.workers) {
             try {
                 t.interrupt();
                 t.join();
             } catch (InterruptedException ignored) {
+                break;
             }
         }
         System.err.println("Finished waiting workers");
 
         System.err.println("Saving state");
         this.exportState();
-        System.err.println("Saved state");
 
         System.err.println("Proxy done");
     }
@@ -112,45 +106,50 @@ public class Proxy implements Destroyable {
 
         int msgCounter = 0;
 
-        try {
-            while (poller.poll() >= 0) {
-                // publishers
-                if (poller.pollin(0)) {
-                    ++msgCounter;
-                    ZMsg zMsg = ZMsg.recvMsg(this.pubSocket);
-                    if (zMsg != null) {
-                        zMsg.addLast(Proxy.PUBWORKER);
-                        zMsg.send(this.workersPush);
-                    }
-                }
-                // subscribers
-                if (poller.pollin(1)) {
-                    ++msgCounter;
-                    ZMsg zMsg = ZMsg.recvMsg(this.subSocket);
-                    if (zMsg != null) {
-                        zMsg.addLast(Proxy.SUBWORKER);
-                        zMsg.send(this.workersPush);
-                    }
-                }
-                // workers
-                if (poller.pollin(2)) {
-                    ++msgCounter;
-                    ZMsg zMsg = ZMsg.recvMsg(this.workersPull);
-                    if (zMsg != null) {
-                        String route = zMsg.removeLast().getString(StandardCharsets.UTF_8);
-                        switch (route) {
-                            case Proxy.PUBWORKER -> zMsg.send(this.pubSocket);
-                            case Proxy.SUBWORKER -> zMsg.send(this.subSocket);
-                        }
-                    }
-                }
-                // save program state to physical memory every SAVERATE handled messages
-                if (msgCounter >= Proxy.SAVERATE) {
-                    this.exportState();
-                    msgCounter = 0;
+        while (!Thread.currentThread().isInterrupted()) {
+            try {
+                if (poller.poll() < 0)
+                    break;
+            } catch (Exception e) {
+                // no context => we leave
+                return;
+            }
+
+            // publishers
+            if (poller.pollin(0)) {
+                ++msgCounter;
+                ZMsg zMsg = ZMsg.recvMsg(this.pubSocket);
+                if (zMsg != null) {
+                    zMsg.addLast(Proxy.PUBWORKER);
+                    zMsg.send(this.workersPush);
                 }
             }
-        } catch (Exception ignored) {
+            // subscribers
+            if (poller.pollin(1)) {
+                ++msgCounter;
+                ZMsg zMsg = ZMsg.recvMsg(this.subSocket);
+                if (zMsg != null) {
+                    zMsg.addLast(Proxy.SUBWORKER);
+                    zMsg.send(this.workersPush);
+                }
+            }
+            // workers
+            if (poller.pollin(2)) {
+                ++msgCounter;
+                ZMsg zMsg = ZMsg.recvMsg(this.workersPull);
+                if (zMsg != null) {
+                    String route = zMsg.removeLast().getString(StandardCharsets.UTF_8);
+                    switch (route) {
+                        case Proxy.PUBWORKER -> zMsg.send(this.pubSocket);
+                        case Proxy.SUBWORKER -> zMsg.send(this.subSocket);
+                    }
+                }
+            }
+            // save program state to physical memory every SAVERATE handled messages
+            if (msgCounter >= Proxy.SAVERATE) {
+                this.exportState();
+                msgCounter = 0;
+            }
         }
     }
 
