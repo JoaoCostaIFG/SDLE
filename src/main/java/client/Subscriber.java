@@ -16,60 +16,47 @@ public class Subscriber extends SocketHolder {
         super(zctx, id);
     }
 
-    public boolean subscribe(String topic) {
+    public boolean subscribe(String topic) throws Exception {
         ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.SUBCMD,
                 Collections.singletonList(topic)).newZMsg();
-        reqZMsg.send(this.socket);
+        if (!reqZMsg.send(this.socket))
+            return false;
 
         ZMsg replyZMsg = ZMsg.recvMsg(this.socket);
-        System.out.println(replyZMsg);
         UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
-        if (reply.getCmd().equals(SUBCMD) &&
-                reply.getArg(0).equals(Proxy.OKREPLY)) {
-            System.out.println("Sub success");
-            return true;
-        } else {
-            System.out.println("Sub failure - Already Subbed");
-            return false;
-        }
+        return reply.getCmd().equals(SUBCMD) &&
+                reply.getArg(0).equals(Proxy.OKREPLY);
     }
 
-    public boolean unsubscribe(String topic) {
+    public boolean unsubscribe(String topic) throws Exception {
         ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.UNSUBCMD,
                 Collections.singletonList(topic)).newZMsg();
-        reqZMsg.send(this.socket);
+        if (!reqZMsg.send(this.socket))
+            return false;
 
         ZMsg replyZMsg = ZMsg.recvMsg(this.socket);
         UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
-        if (reply.getCmd().equals(UNSUBCMD) &&
-                reply.getArg(0).equals(Proxy.OKREPLY)) {
-            return true;
-        } else {
-            return false;
-        }
+        return reply.getCmd().equals(UNSUBCMD) &&
+                reply.getArg(0).equals(Proxy.OKREPLY);
     }
 
-    public String get(String topic) {
-        String ret;
+    public String get(String topic) throws Exception {
+        String ret = null;
 
-        while (true) {
+        while (!Thread.currentThread().isInterrupted()) {
             ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.GETCMD,
                     Collections.singletonList(topic)).newZMsg();
-            reqZMsg.send(this.socket);
+            if (!reqZMsg.send(this.socket))
+                return null;
 
             ZMsg replyZMsg = ZMsg.recvMsg(this.socket);
             UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
             if (!reply.getCmd().equals(GETCMD) || reply.getArg(0).equals(Proxy.ERRREPLY)) {
                 System.out.println("Get failure");
-                ret = null;
                 break;
             } else if (reply.getArg(0).equals(Proxy.EMPTYREPLY)) {
                 System.out.println("Get no updates yet (wait a bit and try again)");
-                try {
-                    Thread.sleep(1000);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+                Thread.sleep(1000);
             } else {
                 ret = reply.getArg(1);
                 break;

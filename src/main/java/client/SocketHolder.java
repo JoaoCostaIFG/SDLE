@@ -18,6 +18,7 @@ public abstract class SocketHolder implements Destroyable {
     @Override
     public void destroy() {
         this.socket.close();
+        System.err.println("Destroyed socket");
     }
 
     public boolean connect(String endpoint) {

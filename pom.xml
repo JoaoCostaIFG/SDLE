@@ -7,12 +7,10 @@
     <groupId>org.example</groupId>
     <artifactId>proj1</artifactId>
     <version>1.0-SNAPSHOT</version>
-    <build>
-        <plugins>
-        </plugins>
-    </build>
 
     <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
     </properties>

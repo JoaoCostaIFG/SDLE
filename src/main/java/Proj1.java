@@ -59,11 +59,14 @@ public class Proj1 {
     }
 
     public void destroy() {
+        this.zctx.close();
+        System.err.println("Closed context");
+
+        System.err.println("Waiting destroyables");
         for (Destroyable d : this.destroyables) {
             d.destroy();
         }
-
-        this.zctx.close();
+        System.err.println("Waited destroyables");
     }
 
     public void doput(String endpoint, String topic, int n) {
@@ -78,7 +81,15 @@ public class Proj1 {
         Random srandom = new Random(System.currentTimeMillis());
         for (int i = 0; i < n; ++i) {
             int temperature = srandom.nextInt(50) - 20;
-            p.put(topic, String.valueOf(temperature));
+            try {
+                if (!p.put(topic, String.valueOf(temperature))) {
+                    System.err.println("Put failed");
+                } else {
+                    System.out.printf("Put (%s): %s\n", topic, temperature);
+                }
+            } catch (Exception e) {
+                return;
+            }
         }
     }
 
@@ -91,18 +102,35 @@ public class Proj1 {
             return;
         }
 
-        if (!s.subscribe(topic)) {
-            System.err.printf("Failed to sub: %s\n", topic);
+        try {
+            System.out.println("sub");
+            if (!s.subscribe(topic)) {
+                System.err.printf("Failed to sub: %s\n", topic);
+                return;
+            }
+            System.out.println("sub");
+        } catch (Exception e) {
             return;
         }
 
         for (int i = 0; i < n || n < 0; ++i) {
-            String update = s.get(topic);
-            System.out.printf("Get (%s): %s\n", topic, update);
+            try {
+                String update = s.get(topic);
+                if (update == null) {
+                    System.err.println("Get failed");
+                } else {
+                    System.out.printf("Get (%s): %s\n", topic, update);
+                }
+            } catch (Exception e) {
+                return;
+            }
         }
 
-        if (!s.unsubscribe(topic)) {
-            System.err.printf("Failed to unsub: %s\n", topic);
+        try {
+            if (!s.unsubscribe(topic)) {
+                System.err.printf("Failed to unsub: %s\n", topic);
+            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -114,9 +142,11 @@ public class Proj1 {
         Proxy proxy = new Proxy(this.zctx);
         this.destroyables.add(proxy);
 
-        proxy.bind(pubPort, subPort);
+        if (!proxy.bind(pubPort, subPort)) {
+            System.err.println("Bind failed");
+            return;
+        }
 
         proxy.pollSockets(this.zctx);
-
     }
 }

@@ -16,12 +16,8 @@ import java.io.FileOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public class Proxy implements Destroyable {
     public static final String OKREPLY = "OK";
@@ -39,7 +35,7 @@ public class Proxy implements Destroyable {
     private final String workersPullEndpoint = "inproc://workersPull";
     private final Socket workersPush;
     private final Socket workersPull;
-    private final ExecutorService workerThreadPool;
+    private final List<Thread> workers;
     private Map<String, TopicQueue> messageQueues;
 
     public Proxy(ZContext zctx) {
@@ -65,11 +61,15 @@ public class Proxy implements Destroyable {
         this.workersPull.bind(this.workersPullEndpoint);
 
         int maxThreads = Runtime.getRuntime().availableProcessors() + 1;
-        this.workerThreadPool = Executors.newFixedThreadPool(maxThreads);
-
+        this.workers = new ArrayList<>();
         for (int i = 0; i < maxThreads; ++i) {
-            this.workerThreadPool.execute(new ProxyWorker(this.zctx, this.workersPushEndpoint,
-                    this.workersPullEndpoint, this));
+            ProxyWorker w = new ProxyWorker(this.zctx,
+                    this.workersPushEndpoint,
+                    this.workersPullEndpoint,
+                    this);
+            Thread t = new Thread(w);
+            this.workers.add(t);
+            t.start();
         }
     }
 
@@ -77,8 +77,25 @@ public class Proxy implements Destroyable {
     public void destroy() {
         this.pubSocket.close();
         this.subSocket.close();
+        this.workersPush.close();
+        this.workersPull.close();
+        System.err.println("Closed sockets");
 
-        this.workerThreadPool.shutdown();
+        System.err.println("Waiting workers");
+        for (Thread t:this.workers) {
+            try {
+                t.interrupt();
+                t.join();
+            } catch (InterruptedException ignored) {
+            }
+        }
+        System.err.println("Finished waiting workers");
+
+        System.err.println("Saving state");
+        this.exportState();
+        System.err.println("Saved state");
+
+        System.err.println("Proxy done");
     }
 
     public boolean bind(int pubPort, int subPort) {
@@ -95,43 +112,45 @@ public class Proxy implements Destroyable {
 
         int msgCounter = 0;
 
-        while (true) {
-            try {
-                poller.poll();
-            } catch (Exception ignored) {
-                return;
-            }
-
-            // publishers
-            if (poller.pollin(0)) {
-                ++msgCounter;
-                ZMsg zMsg = ZMsg.recvMsg(this.pubSocket);
-                zMsg.addLast(Proxy.PUBWORKER);
-                zMsg.send(this.workersPush);
-            }
-            // subscribers
-            if (poller.pollin(1)) {
-                ++msgCounter;
-                ZMsg zMsg = ZMsg.recvMsg(this.subSocket);
-                System.out.println(zMsg);
-                zMsg.addLast(Proxy.SUBWORKER);
-                zMsg.send(this.workersPush);
-            }
-            // workers
-            if (poller.pollin(2)) {
-                ++msgCounter;
-                ZMsg zMsg = ZMsg.recvMsg(this.workersPull);
-                String route = zMsg.removeLast().getString(StandardCharsets.UTF_8);
-                switch (route) {
-                    case Proxy.PUBWORKER -> zMsg.send(this.pubSocket);
-                    case Proxy.SUBWORKER -> zMsg.send(this.subSocket);
+        try {
+            while (poller.poll() >= 0) {
+                // publishers
+                if (poller.pollin(0)) {
+                    ++msgCounter;
+                    ZMsg zMsg = ZMsg.recvMsg(this.pubSocket);
+                    if (zMsg != null) {
+                        zMsg.addLast(Proxy.PUBWORKER);
+                        zMsg.send(this.workersPush);
+                    }
+                }
+                // subscribers
+                if (poller.pollin(1)) {
+                    ++msgCounter;
+                    ZMsg zMsg = ZMsg.recvMsg(this.subSocket);
+                    if (zMsg != null) {
+                        zMsg.addLast(Proxy.SUBWORKER);
+                        zMsg.send(this.workersPush);
+                    }
+                }
+                // workers
+                if (poller.pollin(2)) {
+                    ++msgCounter;
+                    ZMsg zMsg = ZMsg.recvMsg(this.workersPull);
+                    if (zMsg != null) {
+                        String route = zMsg.removeLast().getString(StandardCharsets.UTF_8);
+                        switch (route) {
+                            case Proxy.PUBWORKER -> zMsg.send(this.pubSocket);
+                            case Proxy.SUBWORKER -> zMsg.send(this.subSocket);
+                        }
+                    }
+                }
+                // save program state to physical memory every SAVERATE handled messages
+                if (msgCounter >= Proxy.SAVERATE) {
+                    this.exportState();
+                    msgCounter = 0;
                 }
             }
-
-            if (msgCounter >= Proxy.SAVERATE) {
-                exportState();
-                msgCounter = 0;
-            }
+        } catch (Exception ignored) {
         }
     }
 
@@ -143,6 +162,7 @@ public class Proxy implements Destroyable {
             oos.close();
             fos.close();
         } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
@@ -154,7 +174,7 @@ public class Proxy implements Destroyable {
         IdentifiedMessage reqMsg = new IdentifiedMessage(zMsg);
         String topic = reqMsg.getArg(0);
         String update = reqMsg.getArg(1);
-        System.out.printf("Pub (%s) %s - %s\n", reqMsg.getCmd(), topic, update);
+        System.out.printf("Put: %s - %s\n", topic, update);
 
         // En-queue message. Silently ignore puts in case the message queue doesn't
         // exist (no one would get the message anyway).
