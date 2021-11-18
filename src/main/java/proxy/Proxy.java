@@ -24,23 +24,24 @@ public class Proxy implements Destroyable {
     public static final String ERRREPLY = "ERR";
     public static final String EMPTYREPLY = "EMPTY";
 
+    // frequency of the auto saving of messages
+    private static final int SAVERATE = 50;
+
     // used for internal routing
     protected static final String SUBWORKER = "WSUB";
     protected static final String PUBWORKER = "WPUB";
-    private static final int SAVERATE = 50;
-    private final ZContext zctx;
-    private final Socket pubSocket;
-    private final Socket subSocket;
     private final String workersPushEndpoint = "inproc://workersPush";
     private final String workersPullEndpoint = "inproc://workersPull";
     private final Socket workersPush;
     private final Socket workersPull;
     private final List<Thread> workers;
+
+    // client communication
+    private final Socket pubSocket;
+    private final Socket subSocket;
     private Map<String, TopicQueue> messageQueues;
 
     public Proxy(ZContext zctx) {
-        this.zctx = zctx;
-
         try {
             FileInputStream state = new FileInputStream("state");
             ObjectInputStream ois = new ObjectInputStream(state);
@@ -63,7 +64,7 @@ public class Proxy implements Destroyable {
         int maxThreads = Runtime.getRuntime().availableProcessors() + 1;
         this.workers = new ArrayList<>();
         for (int i = 0; i < maxThreads; ++i) {
-            ProxyWorker w = new ProxyWorker(this.zctx,
+            ProxyWorker w = new ProxyWorker(zctx,
                     this.workersPushEndpoint,
                     this.workersPullEndpoint,
                     this);
