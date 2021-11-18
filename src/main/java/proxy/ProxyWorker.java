@@ -5,7 +5,6 @@ import org.zeromq.ZContext;
 import org.zeromq.ZFrame;
 import org.zeromq.ZMQ.Socket;
 import org.zeromq.ZMsg;
-import zmq.ZError;
 
 public class ProxyWorker implements Runnable {
     Socket pushSock;

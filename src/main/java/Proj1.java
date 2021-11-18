@@ -23,23 +23,6 @@ public class Proj1 extends Thread {
         this.id = id;
     }
 
-    /**
-     * This is a work-around for Java's shutdown hook. The ZContext needs
-     * to be destroyed on the Thread it was created on.
-     */
-    @Override
-    public void start() {
-        System.err.println("Shutting down");
-
-        this.zctx.destroy();
-        System.err.println("Closed context");
-
-        System.err.println("Waiting destroyables");
-        for (Destroyable d : this.destroyables) {
-            d.destroy();
-        }
-    }
-
     public static void usage() {
         System.out.println("Usage: <id> <put|get|proxy> [arg1 [arg2]]");
         System.exit(1);
@@ -75,6 +58,23 @@ public class Proj1 extends Thread {
         }
 
         System.exit(0);
+    }
+
+    /**
+     * This is a work-around for Java's shutdown hook. The ZContext needs
+     * to be destroyed on the Thread it was created on.
+     */
+    @Override
+    public void start() {
+        System.err.println("Shutting down");
+
+        this.zctx.destroy();
+        System.err.println("Closed context");
+
+        System.err.println("Waiting destroyables");
+        for (Destroyable d : this.destroyables) {
+            d.destroy();
+        }
     }
 
     public void doput(String endpoint, String topic, int n) {

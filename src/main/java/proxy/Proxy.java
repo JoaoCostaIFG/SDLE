@@ -10,7 +10,6 @@ import org.zeromq.ZMQ;
 import org.zeromq.ZMQ.Socket;
 import org.zeromq.ZMsg;
 import proxy.TopicQueue.TopicQueue;
-import zmq.ZError;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;

@@ -16,12 +16,6 @@ public abstract class SocketHolder implements Destroyable {
     protected String endpoint;
     protected ZContext zctx;
 
-    protected void setUpSocket(){
-        this.socket = zctx.createSocket(SocketType.REQ);
-        this.socket.setIdentity(id.getBytes(StandardCharsets.UTF_8));
-        this.socket.setReceiveTimeOut(SocketHolder.RECEIVETIMEOUT);
-    }
-
     public SocketHolder(ZContext zctx, String id, String endpoint) {
         this.zctx = zctx;
         this.endpoint = endpoint;
@@ -29,8 +23,13 @@ public abstract class SocketHolder implements Destroyable {
         this.setUpSocket();
     }
 
-    public void reconnect()
-    {
+    protected void setUpSocket() {
+        this.socket = zctx.createSocket(SocketType.REQ);
+        this.socket.setIdentity(id.getBytes(StandardCharsets.UTF_8));
+        this.socket.setReceiveTimeOut(SocketHolder.RECEIVETIMEOUT);
+    }
+
+    public void reconnect() {
         this.socket.close();
         this.setUpSocket();
         this.connect();
@@ -46,11 +45,9 @@ public abstract class SocketHolder implements Destroyable {
         return this.socket.connect(this.endpoint);
     }
 
-    public ZMsg receiveMsg()
-    {
+    public ZMsg receiveMsg() {
         ZMsg replyZMsg = ZMsg.recvMsg(this.socket);
-        if(replyZMsg == null)
-        {
+        if (replyZMsg == null) {
             System.out.println("Couldn't receive message. Reconnecting socket.");
             this.reconnect();
         }
