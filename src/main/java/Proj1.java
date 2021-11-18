@@ -78,10 +78,10 @@ public class Proj1 extends Thread {
     }
 
     public void doput(String endpoint, String topic, int n) {
-        Publisher p = new Publisher(this.zctx, this.id);
+        Publisher p = new Publisher(this.zctx, this.id, endpoint);
         this.destroyables.add(p);
 
-        if (!p.connect(endpoint)) {
+        if (!p.connect()) {
             System.err.printf("Failed connection to proxy: [endpoint=%s]\n", endpoint);
             return;
         }
@@ -103,18 +103,17 @@ public class Proj1 extends Thread {
     }
 
     private void doget(String endpoint, String topic, int n) {
-        Subscriber s = new Subscriber(this.zctx, this.id);
+        Subscriber s = new Subscriber(this.zctx, this.id, endpoint);
         this.destroyables.add(s);
 
-        if (!s.connect(endpoint)) {
-            System.err.printf("Failed connection to endpint: [endpoint=%s]\n", endpoint);
+        if (!s.connect()) {
+            System.err.printf("Failed connection to endpoint: [endpoint=%s]\n", endpoint);
             return;
         }
 
         try {
             if (!s.subscribe(topic)) {
-                System.err.printf("Failed to sub topic: [topic=%s]\n", topic);
-                return;
+                System.err.printf("Failed to sub topic (already subbed): [topic=%s]\n", topic);
             }
         } catch (Exception e) {
             return;
