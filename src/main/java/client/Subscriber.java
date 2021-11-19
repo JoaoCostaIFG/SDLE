@@ -6,11 +6,14 @@ import org.zeromq.ZMsg;
 import proxy.Proxy;
 
 import java.util.Collections;
+import java.util.List;
 
 public class Subscriber extends SocketHolder {
     public static final String GETCMD = "GET";
     public static final String SUBCMD = "SUB";
     public static final String UNSUBCMD = "UNSUB";
+
+    private Integer lastMsgId = -1;
 
     public Subscriber(ZContext zctx, String id, String endpoint) {
         super(zctx, id, endpoint);
@@ -50,7 +53,8 @@ public class Subscriber extends SocketHolder {
     }
 
     public String get(String topic) throws Exception {
-        String ret = null;
+        String content = null;
+        Integer id = -1;
 
         while (!Thread.currentThread().isInterrupted()) {
             ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.GETCMD,
@@ -71,11 +75,21 @@ public class Subscriber extends SocketHolder {
                 System.out.println("Get no updates yet (wait a bit and try again)");
                 Thread.sleep(1000);
             } else {
-                ret = reply.getArg(1);
-                break;
+                id = Integer.parseInt(reply.getArg(1));
+                if(lastMsgId < 0) lastMsgId = id - 1;
+                content = reply.getArg(2);
+
+                System.out.printf("Got ID %d\n", id);
+
+                if(id != lastMsgId + 1) {
+                    System.err.println("Get found out of sequence message. Trying again...");
+                } else {
+                    lastMsgId = id;
+                    break;
+                }
             }
         }
 
-        return ret;
+        return content;
     }
 }
