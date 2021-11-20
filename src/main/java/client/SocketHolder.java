@@ -1,6 +1,5 @@
 package client;
 
-import destroyable.Destroyable;
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
@@ -8,7 +7,7 @@ import org.zeromq.ZMsg;
 
 import java.nio.charset.StandardCharsets;
 
-public abstract class SocketHolder implements Destroyable {
+public abstract class SocketHolder {
     private static final int RECEIVETIMEOUT = 10000;
 
     protected ZMQ.Socket socket;
@@ -35,12 +34,6 @@ public abstract class SocketHolder implements Destroyable {
         this.connect();
     }
 
-    @Override
-    public void destroy() {
-        //this.socket.close();
-        //System.err.println("Destroyed socket");
-    }
-
     public boolean connect() {
         return this.socket.connect(this.endpoint);
     }
@@ -48,9 +41,10 @@ public abstract class SocketHolder implements Destroyable {
     public ZMsg receiveMsg() {
         ZMsg replyZMsg = ZMsg.recvMsg(this.socket);
         if (replyZMsg == null) {
-            System.out.println("Couldn't receive message. Reconnecting socket.");
+            System.err.println("Receive timed out. Reconnecting...");
             this.reconnect();
         }
+
         return replyZMsg;
     }
 }

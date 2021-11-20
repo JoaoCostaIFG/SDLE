@@ -1,22 +1,21 @@
 import client.Publisher;
 import client.Subscriber;
-import destroyable.Destroyable;
+import org.zeromq.SocketType;
 import org.zeromq.ZContext;
+import org.zeromq.ZMQ;
 import proxy.Proxy;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Random;
 
-public class Proj1 extends Thread {
+public class Proj1 {
     private static final int PUBPORT = 5559;
     private static final int SUBPORT = 5560;
     private static final String PUBENDPOINT = "tcp://localhost:" + PUBPORT;
     private static final String SUBENDPOINT = "tcp://localhost:" + SUBPORT;
+    private static final String CTRLENDPOINT = "inproc://control";
 
     ZContext zctx;
     String id;
-    List<Destroyable> destroyables = new ArrayList<>();
 
     public Proj1(String id) {
         this.zctx = new ZContext();
@@ -33,7 +32,6 @@ public class Proj1 extends Thread {
 
         String id = args[0];
         Proj1 p1 = new Proj1(id);
-        Runtime.getRuntime().addShutdownHook(p1);
 
         switch (args[1]) {
             case "put":
@@ -60,26 +58,8 @@ public class Proj1 extends Thread {
         System.exit(0);
     }
 
-    /**
-     * This is a work-around for Java's shutdown hook. The ZContext needs
-     * to be destroyed on the Thread it was created on.
-     */
-    @Override
-    public void start() {
-        System.err.println("Shutting down");
-
-        this.zctx.destroy();
-        System.err.println("Closed context");
-
-        System.err.println("Waiting destroyables");
-        for (Destroyable d : this.destroyables) {
-            d.destroy();
-        }
-    }
-
     public void doput(String endpoint, String topic, int n) {
         Publisher p = new Publisher(this.zctx, this.id, endpoint);
-        this.destroyables.add(p);
 
         if (!p.connect()) {
             System.err.printf("Failed connection to proxy: [endpoint=%s]\n", endpoint);
@@ -96,15 +76,14 @@ public class Proj1 extends Thread {
                     System.out.printf("Published a topic update: [topic=%s], [update=%s]\n", topic, temperature);
                 }
             } catch (Exception e) {
-                System.err.println("Socket exception. Closing..");
-                return;
+                // context closed => leave
+                break;
             }
         }
     }
 
     private void doget(String endpoint, String topic, int n) {
         Subscriber s = new Subscriber(this.zctx, this.id, endpoint);
-        this.destroyables.add(s);
 
         if (!s.connect()) {
             System.err.printf("Failed connection to endpoint: [endpoint=%s]\n", endpoint);
@@ -114,8 +93,11 @@ public class Proj1 extends Thread {
         try {
             if (!s.subscribe(topic)) {
                 System.err.printf("Failed to sub topic (already subbed): [topic=%s]\n", topic);
+            } else {
+                System.err.printf("Subscribed to topic: [topic=%s]\n", topic);
             }
         } catch (Exception e) {
+            // context closed => leave
             return;
         }
 
@@ -128,6 +110,7 @@ public class Proj1 extends Thread {
                     System.out.printf("Got topic update: [topic=%s], [update=%s]\n", topic, update);
                 }
             } catch (Exception e) {
+                // context closed => leave
                 return;
             }
         }
@@ -135,8 +118,12 @@ public class Proj1 extends Thread {
         try {
             if (!s.unsubscribe(topic)) {
                 System.err.printf("Failed to unsub topic: [topic=%s]\n", topic);
+            } else {
+                System.err.printf("Unsubscribed from topic: [topic=%s]\n", topic);
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            // context closed => leave
+            return;
         }
     }
 
@@ -145,14 +132,22 @@ public class Proj1 extends Thread {
     }
 
     public void proxy(int pubPort, int subPort) {
-        Proxy proxy = new Proxy(this.zctx);
-        this.destroyables.add(proxy);
+        Proxy proxy = new Proxy(this.zctx, Proj1.CTRLENDPOINT);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            ZMQ.Socket ctrlSocket = this.zctx.createSocket(SocketType.PAIR);
+            ctrlSocket.connect(Proj1.CTRLENDPOINT);
+            ctrlSocket.send("", 0);
 
+            proxy.waitWorkers();
+        }));
+
+        System.out.println("Proxy ready!");
         if (!proxy.bind(pubPort, subPort)) {
             System.err.println("Bind failed");
             return;
         }
 
         proxy.pollSockets(this.zctx);
+        System.err.println("Proxy done");
     }
 }

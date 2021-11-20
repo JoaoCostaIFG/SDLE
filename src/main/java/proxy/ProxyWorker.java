@@ -24,33 +24,44 @@ public class ProxyWorker implements Runnable {
 
     @Override
     public void run() {
-        try {
-            while (!Thread.currentThread().isInterrupted()) {
-                ZMsg zMsg;
+        while (!Thread.currentThread().isInterrupted()) {
+            ZMsg zMsg;
+            try {
                 zMsg = ZMsg.recvMsg(this.pullSock);
-                if (zMsg == null) continue;
-
-                ZMsg replyZMsg;
-                ZFrame target = zMsg.removeLast();
-                switch (target.toString()) {
-                    case Proxy.PUBWORKER -> {
-                        replyZMsg = this.parent.handlePublisher(zMsg);
-                        replyZMsg.addLast(target);
-                    }
-                    case Proxy.SUBWORKER -> {
-                        replyZMsg = this.parent.handleSubscriber(zMsg);
-                        replyZMsg.addLast(target);
-                    }
-                    default -> {
-                        System.out.println("Worker found some weird stuff");
-                        return;
-                    }
-                }
-
-                replyZMsg.send(this.pushSock);
+            } catch (Exception e) {
+                break;
             }
-        } catch (Exception e) {
-            System.err.println("Worker terminated");
+            if (zMsg == null) continue;
+
+            ZMsg replyZMsg;
+            ZFrame target = zMsg.removeLast();
+            if (target.toString().equals(Proxy.STOPWORKER)) {
+                System.err.println("Worker got kill signal. Quitting...");
+                break;
+            }
+            switch (target.toString()) {
+                case Proxy.PUBWORKER -> {
+                    replyZMsg = this.parent.handlePublisher(zMsg);
+                    replyZMsg.addLast(target);
+                }
+                case Proxy.SUBWORKER -> {
+                    replyZMsg = this.parent.handleSubscriber(zMsg);
+                    replyZMsg.addLast(target);
+                }
+                default -> {
+                    System.out.println("Worker found some weird stuff");
+                    continue;
+                }
+            }
+
+            try {
+                replyZMsg.send(this.pushSock);
+            } catch (Exception e) {
+                break;
+            }
         }
+
+        this.pullSock.close();
+        this.pushSock.close();
     }
 }

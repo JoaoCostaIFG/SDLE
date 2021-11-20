@@ -19,11 +19,10 @@ public class Subscriber extends SocketHolder {
     public boolean subscribe(String topic) throws Exception {
         ZMsg replyZMsg = null;
 
+        ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.SUBCMD,
+                Collections.singletonList(topic)).newZMsg();
         while (replyZMsg == null) {
-            ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.SUBCMD,
-                    Collections.singletonList(topic)).newZMsg();
-            if (!reqZMsg.send(this.socket))
-                return false;
+            if (!reqZMsg.send(this.socket)) return false;
             replyZMsg = this.receiveMsg();
         }
 
@@ -35,12 +34,10 @@ public class Subscriber extends SocketHolder {
     public boolean unsubscribe(String topic) throws Exception {
         ZMsg replyZMsg = null;
 
+        ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.UNSUBCMD,
+                Collections.singletonList(topic)).newZMsg();
         while (replyZMsg == null) {
-            ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.UNSUBCMD,
-                    Collections.singletonList(topic)).newZMsg();
-            if (!reqZMsg.send(this.socket))
-                return false;
-
+            if (!reqZMsg.send(this.socket)) return false;
             replyZMsg = this.receiveMsg();
         }
 
@@ -58,8 +55,7 @@ public class Subscriber extends SocketHolder {
 
             ZMsg replyZMsg = null;
             while (replyZMsg == null) {
-                if (!reqZMsg.send(this.socket))
-                    return null;
+                if (!reqZMsg.send(this.socket)) return null;
                 replyZMsg = this.receiveMsg();
             }
 
