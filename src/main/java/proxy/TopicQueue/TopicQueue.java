@@ -1,7 +1,6 @@
 package proxy.TopicQueue;
 
 import java.io.Serializable;
-import java.sql.Array;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -59,7 +58,7 @@ public class TopicQueue implements Serializable {
 
         this.garbageCollector();
 
-        ArrayList ret = new ArrayList();
+        List<String> ret = new ArrayList<>();
         ret.add(msgId.toString());
         ret.add(content);
 
@@ -92,7 +91,10 @@ public class TopicQueue implements Serializable {
         if (!this.isSubbed(subId)) return false;
 
         QueueNode n = this.subs.get(subId);
-        if (n != null) n.decreaseRef();
+        if (n != null) {
+            n.decreaseRef();
+            this.garbageCollector();
+        }
 
         this.subs.remove(subId);
         return true;
