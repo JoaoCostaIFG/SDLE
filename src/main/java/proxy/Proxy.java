@@ -161,12 +161,12 @@ public class Proxy {
 
     private void destroy() {
         // clean up
-        System.err.println("Cleaning up");
+        System.out.println("Cleaning up");
         this.pubSocket.close();
         this.subSocket.close();
 
         this.exportState();
-        System.err.println("Saved state");
+        System.out.println("Saved state");
 
         // clean up threads
         for (int i = 0; i < this.workers.size(); ++i) {
@@ -187,7 +187,7 @@ public class Proxy {
 
         this.workersPull.close();
         this.workersPush.close();
-        System.err.println("Finished waiting workers");
+        System.out.println("Finished waiting workers");
     }
 
     /**
