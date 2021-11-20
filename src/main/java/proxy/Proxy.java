@@ -41,13 +41,22 @@ public class Proxy {
     private final Socket pubSocket;
     private final Socket subSocket;
     private final Socket ctrlSocket;
-    private Map<String, TopicQueue> messageQueues;
+    private final Map<String, TopicQueue> messageQueues;
 
     public Proxy(ZContext zctx, String ctrlendpoint) {
         this.ctrlSocket = zctx.createSocket(SocketType.PAIR);
         this.ctrlSocket.bind(ctrlendpoint);
 
-        this.importState();
+        // import state
+        Map<String, TopicQueue> messageQueues;
+        try {
+            FileInputStream state = new FileInputStream("state");
+            ObjectInputStream ois = new ObjectInputStream(state);
+            messageQueues = (ConcurrentHashMap) ois.readObject();
+        } catch (Exception e) {
+            messageQueues = new ConcurrentHashMap<>();
+        }
+        this.messageQueues = messageQueues;
 
         // yar har fiddle dee dee! (Simple Pirate Pattern)
         this.pubSocket = zctx.createSocket(SocketType.ROUTER);
@@ -70,16 +79,6 @@ public class Proxy {
             Thread t = new Thread(w);
             this.workers.add(t);
             t.start();
-        }
-    }
-
-    private void importState() {
-        try {
-            FileInputStream state = new FileInputStream("state");
-            ObjectInputStream ois = new ObjectInputStream(state);
-            this.messageQueues = (ConcurrentHashMap) ois.readObject();
-        } catch (Exception e) {
-            this.messageQueues = new ConcurrentHashMap<>();
         }
     }
 
