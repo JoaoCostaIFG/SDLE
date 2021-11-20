@@ -14,6 +14,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -292,7 +293,8 @@ public class Proxy {
         }
 
         // no content to send
-        String content = queue.retrieveUpdate(id);
+
+        List content = queue.retrieveUpdate(id);
         if (content == null) {
             return new IdentifiedMessage(
                     reqMsg.getIdentity(),
@@ -300,8 +302,10 @@ public class Proxy {
                     Collections.singletonList(Proxy.EMPTYREPLY)).newZMsg();
         }
 
+        content.add(0, Proxy.OKREPLY);
+        
         return new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.GETCMD,
-                Arrays.asList(Proxy.OKREPLY, content)).newZMsg();
+                content).newZMsg();
     }
 
     protected ZMsg handleSubscriber(ZMsg zMsg) {
