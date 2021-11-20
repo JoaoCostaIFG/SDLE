@@ -14,9 +14,11 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class Proxy {
@@ -38,21 +40,14 @@ public class Proxy {
     // client communication
     private final Socket pubSocket;
     private final Socket subSocket;
-    private Map<String, TopicQueue> messageQueues;
-
     private final Socket ctrlSocket;
+    private Map<String, TopicQueue> messageQueues;
 
     public Proxy(ZContext zctx, String ctrlendpoint) {
         this.ctrlSocket = zctx.createSocket(SocketType.PAIR);
         this.ctrlSocket.bind(ctrlendpoint);
 
-        try {
-            FileInputStream state = new FileInputStream("state");
-            ObjectInputStream ois = new ObjectInputStream(state);
-            this.messageQueues = (ConcurrentHashMap) ois.readObject();
-        } catch (Exception e) {
-            this.messageQueues = new ConcurrentHashMap<>();
-        }
+        this.importState();
 
         // yar har fiddle dee dee! (Simple Pirate Pattern)
         this.pubSocket = zctx.createSocket(SocketType.ROUTER);
@@ -75,6 +70,28 @@ public class Proxy {
             Thread t = new Thread(w);
             this.workers.add(t);
             t.start();
+        }
+    }
+
+    private void importState() {
+        try {
+            FileInputStream state = new FileInputStream("state");
+            ObjectInputStream ois = new ObjectInputStream(state);
+            this.messageQueues = (ConcurrentHashMap) ois.readObject();
+        } catch (Exception e) {
+            this.messageQueues = new ConcurrentHashMap<>();
+        }
+    }
+
+    private void exportState() {
+        try {
+            FileOutputStream fos = new FileOutputStream("state");
+            ObjectOutputStream oos = new ObjectOutputStream(fos);
+            oos.writeObject(this.messageQueues);
+            oos.close();
+            fos.close();
+        } catch (Exception e) {
+            System.err.println("State saving failed");
         }
     }
 
@@ -128,9 +145,7 @@ public class Proxy {
                 // ctrl socket (die)
                 if (poller.pollin(3)) {
                     // we just die
-                    System.out.println("DEATH");
                     ZMsg.recvMsg(this.ctrlSocket);
-                    System.out.println("DEATH2");
                     break;
                 }
                 // save program state to physical memory every SAVERATE handled messages
@@ -151,15 +166,15 @@ public class Proxy {
         this.pubSocket.close();
         this.subSocket.close();
 
+        this.exportState();
+        System.err.println("Saved state");
+
         // clean up threads
         for (int i = 0; i < this.workers.size(); ++i) {
             ZMsg killMsg = new ZMsg();
             killMsg.add(Proxy.STOPWORKER);
             killMsg.send(this.workersPush);
         }
-
-        this.exportState();
-        System.err.println("Saved state");
     }
 
     public void waitWorkers() {
@@ -174,18 +189,6 @@ public class Proxy {
         this.workersPull.close();
         this.workersPush.close();
         System.err.println("Finished waiting workers");
-    }
-
-    private void exportState() {
-        try {
-            FileOutputStream fos = new FileOutputStream("state");
-            ObjectOutputStream oos = new ObjectOutputStream(fos);
-            oos.writeObject(this.messageQueues);
-            oos.close();
-            fos.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
     }
 
     /**
@@ -284,28 +287,24 @@ public class Proxy {
 
         TopicQueue queue = this.messageQueues.get(topic);
 
-        // TODO is a synchronized block needed for the next 2 queue usages
-
         String id = reqMsg.getIdentityStr();
         if (!queue.isSubbed(id)) {
             return new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.GETCMD,
                     Collections.singletonList(Proxy.ERRREPLY)).newZMsg();
         }
 
+        List<String> content = queue.retrieveUpdate(id);
         // no content to send
-
-        List content = queue.retrieveUpdate(id);
         if (content == null) {
             return new IdentifiedMessage(
                     reqMsg.getIdentity(),
                     Subscriber.GETCMD,
                     Collections.singletonList(Proxy.EMPTYREPLY)).newZMsg();
+        } else {
+            content.add(0, Proxy.OKREPLY);
+            return new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.GETCMD,
+                    content).newZMsg();
         }
-
-        content.add(0, Proxy.OKREPLY);
-        
-        return new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.GETCMD,
-                content).newZMsg();
     }
 
     protected ZMsg handleSubscriber(ZMsg zMsg) {

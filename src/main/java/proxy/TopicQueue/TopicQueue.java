@@ -77,10 +77,6 @@ public class TopicQueue implements Serializable {
         this.head = this.head.next;
     }
 
-    public synchronized int size() {
-        return size;
-    }
-
     public synchronized boolean sub(String subId) {
         if (this.isSubbed(subId)) return false;
         this.subs.put(subId, null);

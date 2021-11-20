@@ -71,7 +71,7 @@ public class Proj1 {
             int temperature = srandom.nextInt(50) - 20;
             try {
                 if (!p.put(topic, String.valueOf(temperature))) {
-                    System.err.println("Put failed. Try again...");
+                    System.err.printf("Put failed: [topic=%s], [update=%s]\n", topic, temperature);
                 } else {
                     System.out.printf("Published a topic update: [topic=%s], [update=%s]\n", topic, temperature);
                 }
@@ -105,7 +105,7 @@ public class Proj1 {
             try {
                 String update = s.get(topic);
                 if (update == null) {
-                    System.err.println("Get failed");
+                    System.err.printf("Get failed: [topic=%s]\n", topic);
                 } else {
                     System.out.printf("Got topic update: [topic=%s], [update=%s]\n", topic, update);
                 }
@@ -143,7 +143,7 @@ public class Proj1 {
 
         System.out.println("Proxy ready!");
         if (!proxy.bind(pubPort, subPort)) {
-            System.err.println("Bind failed");
+            System.err.printf("Bind failed: [pubPort=%d], [subPort=%d]\n", pubPort, subPort);
             return;
         }
 

@@ -7,10 +7,9 @@ import org.zeromq.ZMQ.Socket;
 import org.zeromq.ZMsg;
 
 public class ProxyWorker implements Runnable {
-    Socket pushSock;
-    Socket pullSock;
-
-    Proxy parent;
+    private final Socket pushSock;
+    private final Socket pullSock;
+    private final Proxy parent;
 
     public ProxyWorker(ZContext zctx, String endpointIn, String endpointOut, Proxy parent) {
         this.pushSock = zctx.createSocket(SocketType.PUSH);

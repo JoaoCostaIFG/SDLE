@@ -6,7 +6,6 @@ import org.zeromq.ZMsg;
 import proxy.Proxy;
 
 import java.util.Collections;
-import java.util.List;
 
 public class Subscriber extends SocketHolder {
     public static final String GETCMD = "GET";
@@ -72,12 +71,12 @@ public class Subscriber extends SocketHolder {
                 Thread.sleep(1000);
             } else {
                 id = Integer.parseInt(reply.getArg(1));
-                if(lastMsgId < 0) lastMsgId = id - 1;
+                if (lastMsgId < 0) lastMsgId = id - 1;
                 content = reply.getArg(2);
 
                 System.out.printf("Got ID %d\n", id);
 
-                if(id != lastMsgId + 1) {
+                if (id != lastMsgId + 1) {
                     System.err.println("Get found out of sequence message. Trying again...");
                 } else {
                     lastMsgId = id;
