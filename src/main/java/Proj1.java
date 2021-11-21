@@ -94,7 +94,7 @@ public class Proj1 {
             if (!s.subscribe(topic)) {
                 System.err.printf("Failed to sub topic (already subbed): [topic=%s]\n", topic);
             } else {
-                System.err.printf("Subscribed to topic: [topic=%s]\n", topic);
+                System.out.printf("Subscribed to topic: [topic=%s]\n", topic);
             }
         } catch (Exception e) {
             // context closed => leave
@@ -119,7 +119,7 @@ public class Proj1 {
             if (!s.unsubscribe(topic)) {
                 System.err.printf("Failed to unsub topic: [topic=%s]\n", topic);
             } else {
-                System.err.printf("Unsubscribed from topic: [topic=%s]\n", topic);
+                System.out.printf("Unsubscribed from topic: [topic=%s]\n", topic);
             }
         } catch (Exception e) {
             // context closed => leave
@@ -148,6 +148,6 @@ public class Proj1 {
         }
 
         proxy.pollSockets(this.zctx);
-        System.err.println("Proxy done");
+        System.out.println("Proxy done");
     }
 }
