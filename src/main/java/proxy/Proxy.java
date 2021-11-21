@@ -10,16 +10,17 @@ import org.zeromq.ZMQ.Socket;
 import org.zeromq.ZMsg;
 import proxy.TopicQueue.TopicQueue;
 
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 public class Proxy {
     public static final String OKREPLY = "OK";
@@ -48,15 +49,7 @@ public class Proxy {
         this.ctrlSocket.bind(ctrlendpoint);
 
         // import state
-        Map<String, TopicQueue> messageQueues;
-        try {
-            FileInputStream state = new FileInputStream("state");
-            ObjectInputStream ois = new ObjectInputStream(state);
-            messageQueues = (ConcurrentHashMap) ois.readObject();
-        } catch (Exception e) {
-            messageQueues = new ConcurrentHashMap<>();
-        }
-        this.messageQueues = messageQueues;
+        this.messageQueues = this.importState();
 
         // yar har fiddle dee dee! (Simple Pirate Pattern)
         this.pubSocket = zctx.createSocket(SocketType.ROUTER);
@@ -82,15 +75,45 @@ public class Proxy {
         }
     }
 
+    private Map<String, TopicQueue> importState() {
+        Map<String, TopicQueue> messageQueues = new ConcurrentHashMap<>();
+
+        File stateFolder = new File("queues_state");
+        File[] listOfFiles = stateFolder.listFiles();
+
+        if(listOfFiles == null || listOfFiles.length < 1) return messageQueues;
+
+        for(File file : stateFolder.listFiles()) {
+            if(!file.isFile()) continue;
+
+            String topicName = file.getName();
+            try {
+                FileInputStream state = new FileInputStream(file);
+                ObjectInputStream ois = new ObjectInputStream(state);
+                messageQueues.put(topicName, (TopicQueue) ois.readObject());
+            } catch (Exception e) {
+                messageQueues = new ConcurrentHashMap<>();
+            }
+        }
+
+        return messageQueues;
+    }
+
     private void exportState() {
-        try {
-            FileOutputStream fos = new FileOutputStream("state");
-            ObjectOutputStream oos = new ObjectOutputStream(fos);
-            oos.writeObject(this.messageQueues);
-            oos.close();
-            fos.close();
-        } catch (Exception e) {
-            System.err.println("State saving failed");
+        File stateDirectory = new File("queues_state");
+        if(!stateDirectory.exists()) stateDirectory.mkdir();
+
+        for (Map.Entry<String, TopicQueue> entry : this.messageQueues.entrySet()) {
+            try {
+                File stateFile = new File(stateDirectory.getName() + "/" + entry.getKey());
+                FileOutputStream fos = new FileOutputStream(stateFile); // file named after topic
+                ObjectOutputStream oos = new ObjectOutputStream(fos);
+                oos.writeObject(entry.getValue());
+                oos.close();
+                fos.close();
+            } catch (Exception e) {
+                System.err.println("Topic " + entry.getKey() + " state saving failed");
+            }
         }
     }
 
