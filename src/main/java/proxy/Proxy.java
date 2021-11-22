@@ -12,22 +12,14 @@ import proxy.TopicQueue.TopicQueue;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
-import java.util.stream.Stream;
 
 public class Proxy {
     public static final String OKREPLY = "OK";
+    public static final String NEEDACK = "NEEDACK";
     public static final String ERRREPLY = "ERR";
     public static final String EMPTYREPLY = "EMPTY";
-    public static final String ACKREPLY = "ACK";
     // used for internal routing
     protected static final String SUBWORKER = "WSUB";
     protected static final String PUBWORKER = "WPUB";
@@ -83,10 +75,10 @@ public class Proxy {
         File stateFolder = new File("queues_state");
         File[] listOfFiles = stateFolder.listFiles();
 
-        if(listOfFiles == null || listOfFiles.length < 1) return messageQueues;
+        if (listOfFiles == null || listOfFiles.length < 1) return messageQueues;
 
-        for(File file : stateFolder.listFiles()) {
-            if(!file.isFile()) continue;
+        for (File file : stateFolder.listFiles()) {
+            if (!file.isFile()) continue;
 
             String topicName = file.getName();
             try {
@@ -103,7 +95,7 @@ public class Proxy {
 
     private void exportState() {
         File stateDirectory = new File("queues_state");
-        if(!stateDirectory.exists()) stateDirectory.mkdir();
+        if (!stateDirectory.exists()) stateDirectory.mkdir();
 
         for (Map.Entry<String, TopicQueue> entry : this.messageQueues.entrySet()) {
             try {
@@ -296,7 +288,6 @@ public class Proxy {
     }
 
 
-
     /**
      * GET <topic>
      * (success)    -----> GET OK <answer>
@@ -304,13 +295,13 @@ public class Proxy {
      */
     private ZMsg handleGetCmd(IdentifiedMessage reqMsg) {
         String topic = reqMsg.getArg(0);
+        int requestedId = Integer.parseInt(reqMsg.getArg(1));
 
         // if queue doesn't exist => no one has subscribed (including you)
         if (!this.messageQueues.containsKey(topic)) {
             return new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.GETCMD,
                     Collections.singletonList(Proxy.ERRREPLY)).newZMsg();
         }
-
         TopicQueue queue = this.messageQueues.get(topic);
 
         String id = reqMsg.getIdentityStr();
@@ -319,18 +310,36 @@ public class Proxy {
                     Collections.singletonList(Proxy.ERRREPLY)).newZMsg();
         }
 
-        List<String> content = queue.retrieveUpdate(id);
-        // no content to send
-        if (content == null) {
+        // check if there are updates for the given user
+        int lastId = queue.hasUpdate(id);
+        // discard messages
+        while (lastId > 0 && lastId < requestedId) {
+            queue.retrieveUpdate(id);
+            lastId = queue.hasUpdate(id);
+        }
+
+        if (lastId > 0) {
+            return new IdentifiedMessage(
+                    reqMsg.getIdentity(),
+                    Subscriber.GETCMD,
+                    Arrays.asList(Proxy.NEEDACK, Integer.toString(lastId))).newZMsg();
+        } else {
             return new IdentifiedMessage(
                     reqMsg.getIdentity(),
                     Subscriber.GETCMD,
                     Collections.singletonList(Proxy.EMPTYREPLY)).newZMsg();
-        } else {
-            content.add(0, Proxy.OKREPLY);
-            return new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.GETCMD,
-                    content).newZMsg();
         }
+    }
+
+    protected ZMsg handleAckGetCmd(IdentifiedMessage reqMsg) {
+        String topic = reqMsg.getArg(0);
+        TopicQueue queue = this.messageQueues.get(topic);
+        String id = reqMsg.getIdentityStr();
+        List<String> content = queue.retrieveUpdate(id);
+        // send content
+        content.add(0, Proxy.OKREPLY);
+        return new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.GETCMD,
+                content).newZMsg();
     }
 
     protected ZMsg handleSubscriber(ZMsg zMsg) {
@@ -341,6 +350,7 @@ public class Proxy {
             case Subscriber.SUBCMD -> this.handleSubCmd(reqMsg);
             case Subscriber.UNSUBCMD -> this.handleUnsubCmd(reqMsg);
             case Subscriber.GETCMD -> this.handleGetCmd(reqMsg);
+            case Subscriber.ACKGETCMD -> this.handleAckGetCmd(reqMsg);
             default -> new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.GETCMD,
                     Collections.singletonList(Proxy.ERRREPLY)).newZMsg();
         };

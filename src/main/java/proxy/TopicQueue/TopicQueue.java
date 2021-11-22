@@ -43,6 +43,14 @@ public class TopicQueue implements Serializable {
         ++this.size;
     }
 
+    public synchronized int hasUpdate(String subId) {
+        if (!this.subs.containsKey(subId)) return -1;
+
+        QueueNode qn = this.subs.get(subId);
+        if (qn == null) return -1;
+        return qn.id;
+    }
+
     public synchronized List<String> retrieveUpdate(String subId) {
         if (!this.subs.containsKey(subId)) return null;
 
