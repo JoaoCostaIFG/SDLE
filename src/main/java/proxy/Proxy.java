@@ -20,12 +20,14 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.stream.Stream;
 
 public class Proxy {
     public static final String OKREPLY = "OK";
     public static final String ERRREPLY = "ERR";
     public static final String EMPTYREPLY = "EMPTY";
+    public static final String ACKREPLY = "ACK";
     // used for internal routing
     protected static final String SUBWORKER = "WSUB";
     protected static final String PUBWORKER = "WPUB";
@@ -292,6 +294,8 @@ public class Proxy {
                     Collections.singletonList(Proxy.ERRREPLY)).newZMsg();
         }
     }
+
+
 
     /**
      * GET <topic>

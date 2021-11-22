@@ -6,6 +6,7 @@ import org.zeromq.ZMsg;
 import proxy.Proxy;
 
 import java.util.Collections;
+import java.util.concurrent.ExecutionException;
 
 public class Subscriber extends SocketHolder {
     public static final String GETCMD = "GET";
@@ -48,6 +49,16 @@ public class Subscriber extends SocketHolder {
                 reply.getArg(0).equals(Proxy.OKREPLY);
     }
 
+    public ZMsg sendAndReply(ZMsg reqZMsg) throws Exception {
+        ZMsg replyZMsg = null;
+
+        while (replyZMsg == null) {
+            if (!reqZMsg.send(this.socket)) return null;
+            replyZMsg = this.receiveMsg();
+        }
+        return replyZMsg;
+    }
+
     public String get(String topic) throws Exception {
         String content = null;
         Integer id = -1;
@@ -55,12 +66,7 @@ public class Subscriber extends SocketHolder {
         while (!Thread.currentThread().isInterrupted()) {
             ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.GETCMD,
                     Collections.singletonList(topic)).newZMsg();
-
-            ZMsg replyZMsg = null;
-            while (replyZMsg == null) {
-                if (!reqZMsg.send(this.socket)) return null;
-                replyZMsg = this.receiveMsg();
-            }
+            ZMsg replyZMsg = this.sendAndReply(reqZMsg); // Throws exception
 
             UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
             if (!reply.getCmd().equals(GETCMD) || reply.getArg(0).equals(Proxy.ERRREPLY)) {
@@ -80,6 +86,8 @@ public class Subscriber extends SocketHolder {
                     System.err.println("Get found out of sequence message. Trying again...");
                 } else {
                     lastMsgId = id;
+                    ZMsg ack = new UnidentifiedMessage(Proxy.ACKREPLY,
+                            Collections.singletonList(lastMsgId.toString())).newZMsg();
                     break;
                 }
             }
