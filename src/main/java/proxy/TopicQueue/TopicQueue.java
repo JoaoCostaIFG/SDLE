@@ -18,15 +18,22 @@ public class TopicQueue implements Serializable {
 
     private Integer msgId;
 
+    private boolean saved;
+    private boolean wasChanged;
+
     public TopicQueue() {
         this.head = null;
         this.tail = null;
         this.size = 0;
         this.subs = new HashMap<>();
         this.msgId = 0;
+        this.saved = false;
+        this.wasChanged = false;
     }
 
     public synchronized void push(String content) {
+        this.wasChanged = true;
+
         ++this.msgId;
         if (this.size == 0) this.head = this.tail = new QueueNode(content, msgId);
         else this.tail = new QueueNode(content, this.tail, msgId);
@@ -62,6 +69,8 @@ public class TopicQueue implements Serializable {
         QueueNode qn = this.subs.get(subId);
         if (qn == null) return null;
 
+        this.wasChanged = true;
+
         // retrieve content and advance pointer
         String content = qn.getContent();
         Integer msgId = qn.id;
@@ -92,12 +101,15 @@ public class TopicQueue implements Serializable {
 
     public synchronized boolean sub(String subId) {
         if (this.isSubbed(subId)) return false;
+        this.wasChanged = true;
         this.subs.put(subId, null);
         return true;
     }
 
     public synchronized boolean unsub(String subId) {
         if (!this.isSubbed(subId)) return false;
+
+        this.wasChanged = true;
 
         QueueNode n = this.subs.get(subId);
         if (n != null) {
@@ -112,4 +124,12 @@ public class TopicQueue implements Serializable {
     public synchronized boolean isSubbed(String subId) {
         return this.subs.containsKey(subId);
     }
+
+    public void resetChange() { this.wasChanged = false; }
+
+    public void setSaved(boolean saved) { this.saved = saved; }
+
+    public boolean isSaved() { return this.saved; }
+
+    public boolean isChanged() { return this.wasChanged; }
 }
