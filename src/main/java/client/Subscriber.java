@@ -7,6 +7,8 @@ import proxy.Proxy;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Subscriber extends SocketHolder {
     public static final String GETCMD = "GET";
@@ -14,10 +16,11 @@ public class Subscriber extends SocketHolder {
     public static final String SUBCMD = "SUB";
     public static final String UNSUBCMD = "UNSUB";
 
-    private Integer lastMsgId = -1;
+    private final Map<String, Integer> lastMsgId;
 
     public Subscriber(ZContext zctx, String id, String endpoint) {
         super(zctx, id, endpoint);
+        lastMsgId = new HashMap<>();
     }
 
     public boolean subscribe(String topic) throws Exception {
@@ -31,8 +34,8 @@ public class Subscriber extends SocketHolder {
         }
 
         UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
-        return reply.getCmd().equals(SUBCMD) &&
-                reply.getArg(0).equals(Proxy.OKREPLY);
+        this.lastMsgId.put(topic,-1);
+        return reply.getCmd().equals(SUBCMD) && reply.getArg(0).equals(Proxy.OKREPLY);
     }
 
     public boolean unsubscribe(String topic) throws Exception {
@@ -46,8 +49,8 @@ public class Subscriber extends SocketHolder {
         }
 
         UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
-        return reply.getCmd().equals(UNSUBCMD) &&
-                reply.getArg(0).equals(Proxy.OKREPLY);
+        this.lastMsgId.remove(topic);
+        return reply.getCmd().equals(UNSUBCMD) && reply.getArg(0).equals(Proxy.OKREPLY);
     }
 
     public ZMsg sendAndReply(ZMsg reqZMsg) throws Exception {
@@ -65,8 +68,9 @@ public class Subscriber extends SocketHolder {
 
         while (!Thread.currentThread().isInterrupted()) {
             // send request
+            int lastId = this.lastMsgId.get(topic);
             ZMsg reqZMsg = new UnidentifiedMessage(Subscriber.GETCMD,
-                    Arrays.asList(topic, String.valueOf(this.lastMsgId + 1))).newZMsg();
+                    Arrays.asList(topic, String.valueOf(lastId + 1))).newZMsg();
             ZMsg replyZMsg = this.sendAndReply(reqZMsg); // Throws exception
             UnidentifiedMessage reply = new UnidentifiedMessage(replyZMsg);
 
@@ -86,13 +90,13 @@ public class Subscriber extends SocketHolder {
                 int id = Integer.parseInt(reply.getArg(1));
                 content = reply.getArg(2);
 
-                if (this.lastMsgId < 0) this.lastMsgId = id - 1;
+                if (lastId < 0) lastId = id - 1;
                 System.out.printf("Got ID %d\n", id);
 
-                if (id < this.lastMsgId + 1) {
+                if (id < lastId + 1) {
                     System.err.println("Get found out of sequence message. Ignoring...");
                 } else {
-                    this.lastMsgId = id;
+                    this.lastMsgId.put(topic, id);
                     ZMsg ackZMsg = new UnidentifiedMessage(Subscriber.ACKGETCMD,
                             Arrays.asList(topic, this.lastMsgId.toString())).newZMsg();
                     ZMsg contentZMsg = this.sendAndReply(ackZMsg); // Throws exception
