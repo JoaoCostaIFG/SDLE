@@ -90,7 +90,9 @@ public class Proxy {
             try {
                 FileInputStream state = new FileInputStream(file);
                 ObjectInputStream ois = new ObjectInputStream(state);
-                messageQueues.put(topicName, (TopicQueue) ois.readObject());
+                TopicQueue topicQueue = (TopicQueue) ois.readObject();
+                topicQueue.resetChange();
+                messageQueues.put(topicName, topicQueue);
             } catch (Exception e) {
                 messageQueues = new ConcurrentHashMap<>();
             }
@@ -104,6 +106,11 @@ public class Proxy {
         if(!stateDirectory.exists()) stateDirectory.mkdir();
 
         for (Map.Entry<String, TopicQueue> entry : this.messageQueues.entrySet()) {
+            TopicQueue queue = entry.getValue();
+            if(!queue.isChanged() && queue.isSaved()) continue;
+            queue.setSaved(true);
+            queue.resetChange();
+
             try {
                 File stateFile = new File(stateDirectory.getName() + "/" + entry.getKey());
                 FileOutputStream fos = new FileOutputStream(stateFile); // file named after topic
@@ -112,6 +119,7 @@ public class Proxy {
                 oos.close();
                 fos.close();
             } catch (Exception e) {
+                queue.setSaved(false);
                 System.err.println("Topic " + entry.getKey() + " state saving failed");
             }
         }
