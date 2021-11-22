@@ -33,13 +33,13 @@ program as well.
 
 ### Usage
 
-The arguments of the program are as follows: `<id> <role> [arg1 [arg2]]`.
+The arguments of the program are as follows: `<proxy|id <put|get>> [arg1 [arg2]]`.
 
 There are 3 different **roles**:
 
 - **proxy** - the central server. One instance of this should be running in
   order to allow messages to be delivered/shared between clients. E.g.:
-  `id0 proxy`.
+  `proxy`.
 - **put** - a client that is publishing information. This will post a given
   number of random updates to a given topic E.g.:
   `id1 put topic number_of_posts`.

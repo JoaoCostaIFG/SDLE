@@ -73,29 +73,31 @@ public class Subscriber extends SocketHolder {
             if (!reply.getCmd().equals(GETCMD) || reply.getArg(0).equals(Proxy.ERRREPLY)) {
                 System.out.println("Get failure");
                 break;
-            } else {
-                String replyType = reply.getArg(0);
-                if (replyType.equals(Proxy.EMPTYREPLY)) {
-                    System.out.println("Get no updates yet (wait a bit and try again)");
-                    Thread.sleep(1000);
-                } else if (replyType.equals(Proxy.NEEDACK)) {
-                    int id = Integer.parseInt(reply.getArg(1));
-                    if (this.lastMsgId < 0) this.lastMsgId = id - 1;
-                    System.out.printf("Got ID %d\n", id);
+            }
 
-                    if (id < this.lastMsgId + 1) {
-                        System.err.println("Get found out of sequence message. Ignoring...");
-                    } else {
-                        this.lastMsgId = id;
-                        ZMsg ackZMsg = new UnidentifiedMessage(Subscriber.ACKGETCMD,
-                                Arrays.asList(topic, this.lastMsgId.toString())).newZMsg();
-                        ZMsg contentZMsg = this.sendAndReply(ackZMsg); // Throws exception
-                        UnidentifiedMessage contentMsg = new UnidentifiedMessage(contentZMsg);
-                        // TODO recheck ID?
-                        id = Integer.parseInt(contentMsg.getArg(1));
-                        content = contentMsg.getArg(2);
-                        break;
-                    }
+            String replyType = reply.getArg(0);
+            if (replyType.equals(Proxy.EMPTYREPLY)) {
+                System.out.println("Get no updates yet (wait a bit and try again)");
+                Thread.sleep(1000);
+                continue;
+            }
+
+            if (replyType.equals(Proxy.NEEDACK)) {
+                int id = Integer.parseInt(reply.getArg(1));
+                content = reply.getArg(2);
+
+                if (this.lastMsgId < 0) this.lastMsgId = id - 1;
+                System.out.printf("Got ID %d\n", id);
+
+                if (id < this.lastMsgId + 1) {
+                    System.err.println("Get found out of sequence message. Ignoring...");
+                } else {
+                    this.lastMsgId = id;
+                    ZMsg ackZMsg = new UnidentifiedMessage(Subscriber.ACKGETCMD,
+                            Arrays.asList(topic, this.lastMsgId.toString())).newZMsg();
+                    ZMsg contentZMsg = this.sendAndReply(ackZMsg); // Throws exception
+                    // TODO recheck ID?
+                    break;
                 }
             }
         }

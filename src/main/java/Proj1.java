@@ -23,12 +23,12 @@ public class Proj1 {
     }
 
     public static void usage() {
-        System.out.println("Usage: <id> <put|get|proxy> [arg1 [arg2]]");
+        System.out.println("Usage: <proxy|id <put|get>> [arg1 [arg2]]");
         System.exit(1);
     }
 
     public static void main(String[] args) {
-        if (args.length < 2) usage();
+        if (args.length < 1) usage();
 
         String id = args[0];
         Proj1 p1 = new Proj1(id);

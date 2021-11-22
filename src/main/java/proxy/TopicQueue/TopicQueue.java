@@ -51,6 +51,11 @@ public class TopicQueue implements Serializable {
         return qn.id;
     }
 
+    // Unsafe, must call hasUpdate first
+    public synchronized String getContent(String subId) {
+        return this.subs.get(subId).getContent();
+    }
+
     public synchronized List<String> retrieveUpdate(String subId) {
         if (!this.subs.containsKey(subId)) return null;
 

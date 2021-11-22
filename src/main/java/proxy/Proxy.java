@@ -322,7 +322,11 @@ public class Proxy {
             return new IdentifiedMessage(
                     reqMsg.getIdentity(),
                     Subscriber.GETCMD,
-                    Arrays.asList(Proxy.NEEDACK, Integer.toString(lastId))).newZMsg();
+                    Arrays.asList(
+                            Proxy.NEEDACK,
+                            Integer.toString(lastId),
+                            queue.getContent(id)
+                    )).newZMsg();
         } else {
             return new IdentifiedMessage(
                     reqMsg.getIdentity(),
