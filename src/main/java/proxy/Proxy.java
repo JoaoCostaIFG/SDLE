@@ -85,7 +85,7 @@ public class Proxy {
                 FileInputStream state = new FileInputStream(file);
                 ObjectInputStream ois = new ObjectInputStream(state);
                 TopicQueue topicQueue = (TopicQueue) ois.readObject();
-                topicQueue.resetChange();
+                topicQueue.resetChange(); // Failsafe
                 messageQueues.put(topicName, topicQueue);
             } catch (Exception e) {
                 messageQueues = new ConcurrentHashMap<>();
@@ -101,8 +101,8 @@ public class Proxy {
 
         for (Map.Entry<String, TopicQueue> entry : this.messageQueues.entrySet()) {
             TopicQueue queue = entry.getValue();
-            if(!queue.isChanged() && queue.isSaved()) continue;
-            queue.setSaved(true);
+            if(!queue.isChanged()) continue;
+
             queue.resetChange();
 
             try {
@@ -113,7 +113,7 @@ public class Proxy {
                 oos.close();
                 fos.close();
             } catch (Exception e) {
-                queue.setSaved(false);
+                queue.setChanged(); // Attempt to save some other time
                 System.err.println("Topic " + entry.getKey() + " state saving failed");
             }
         }
@@ -230,7 +230,6 @@ public class Proxy {
         if (this.messageQueues.containsKey(topic)) {
             TopicQueue queue = this.messageQueues.get(topic);
             queue.push(update);
-            queue.setSaved(false);
         }
 
         return new IdentifiedMessage(reqMsg.getIdentity(), Publisher.PUTCMD,

@@ -18,7 +18,6 @@ public class TopicQueue implements Serializable {
 
     private Integer msgId;
 
-    private boolean saved;
     private boolean wasChanged;
 
     public TopicQueue() {
@@ -27,8 +26,7 @@ public class TopicQueue implements Serializable {
         this.size = 0;
         this.subs = new HashMap<>();
         this.msgId = 0;
-        this.saved = false;
-        this.wasChanged = false;
+        this.wasChanged = true;
     }
 
     public synchronized void push(String content) {
@@ -130,9 +128,7 @@ public class TopicQueue implements Serializable {
 
     public void resetChange() { this.wasChanged = false; }
 
-    public void setSaved(boolean saved) { this.saved = saved; }
-
-    public boolean isSaved() { return this.saved; }
+    public void setChanged() { this.wasChanged = true; }
 
     public boolean isChanged() { return this.wasChanged; }
 }
