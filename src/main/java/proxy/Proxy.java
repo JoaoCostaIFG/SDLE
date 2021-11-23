@@ -230,6 +230,7 @@ public class Proxy {
         if (this.messageQueues.containsKey(topic)) {
             TopicQueue queue = this.messageQueues.get(topic);
             queue.push(update);
+            queue.setSaved(false);
         }
 
         return new IdentifiedMessage(reqMsg.getIdentity(), Publisher.PUTCMD,
