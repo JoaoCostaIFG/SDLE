@@ -4,7 +4,7 @@ import java.io.Serializable;
 
 public class QueueNode implements Serializable {
     private final String content;
-    protected QueueNode next;
+    protected transient QueueNode next;
     protected int refCount;
     protected Integer id;
 

@@ -1,6 +1,9 @@
 package proxy.TopicQueue;
 
+import java.io.IOException;
+import java.io.ObjectStreamException;
 import java.io.Serializable;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -10,9 +13,9 @@ public class TopicQueue implements Serializable {
     // people that subscribed to this queue
     private final Map<String, QueueNode> subs;
     // first node
-    private QueueNode head;
+    private transient QueueNode head;
     // last node
-    private QueueNode tail;
+    private transient QueueNode tail;
     // queue size
     private int size;
 
@@ -128,6 +131,52 @@ public class TopicQueue implements Serializable {
 
     public void resetChange() { this.wasChanged = false; }
 
-
     public boolean isChanged() { return this.wasChanged; }
+
+
+    private void writeObject(java.io.ObjectOutputStream out)
+            throws IOException {
+        out.writeObject(subs);
+        out.writeInt(size);
+        out.writeObject(msgId);
+
+        QueueNode cur = head;
+        while (cur != null) {
+            out.writeObject(cur);
+            cur = cur.next;
+        }
+    }
+    private void readObject(java.io.ObjectInputStream in)
+            throws IOException, ClassNotFoundException {
+
+        try {
+            // field subs is final, so we must do this
+            // subs is also private, so we need getDeclaredField()
+            Field subsField = this.getClass().getDeclaredField("subs");
+
+            // make the field non final
+            subsField.setAccessible(true);
+            subsField.set(this, in.readObject());
+
+            // make the field final again
+            subsField.setAccessible(false);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            System.err.println("The subs map is final, so THIS (gestures broadly) is necessary."
+                    + "\nIf this failed, most likely the field was renamed or no longer private.");
+            e.printStackTrace();
+        }
+
+        size = in.readInt();
+        msgId = (Integer) in.readObject();
+
+        head = (QueueNode) in.readObject();
+        QueueNode lastRead = head;
+        for (int i=1; i<size; i++) {
+            QueueNode cur = (QueueNode) in.readObject();
+            lastRead.next = cur;
+            lastRead = cur;
+        }
+        tail = lastRead;
+    }
+
 }
