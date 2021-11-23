@@ -32,6 +32,9 @@ public class TopicQueue implements Serializable {
     }
 
     public synchronized void push(String content) {
+        // no subscribers
+        if (this.subs.size() == 0) return;
+
         this.wasChanged = true;
 
         ++this.msgId;
