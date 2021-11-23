@@ -18,7 +18,7 @@ public class TopicQueue implements Serializable {
 
     private Integer msgId;
 
-    private boolean wasChanged;
+    private transient boolean wasChanged;
 
     public TopicQueue() {
         this.head = null;
@@ -128,7 +128,6 @@ public class TopicQueue implements Serializable {
 
     public void resetChange() { this.wasChanged = false; }
 
-    public void setChanged() { this.wasChanged = true; }
 
     public boolean isChanged() { return this.wasChanged; }
 }
