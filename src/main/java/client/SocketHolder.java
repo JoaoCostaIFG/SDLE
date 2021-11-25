@@ -14,6 +14,7 @@ public abstract class SocketHolder {
     protected String id;
     protected String endpoint;
     protected ZContext zctx;
+    protected int nTimeouts;
 
     public SocketHolder(ZContext zctx, String id, String endpoint) {
         this.zctx = zctx;
@@ -26,6 +27,18 @@ public abstract class SocketHolder {
         this.socket = zctx.createSocket(SocketType.REQ);
         this.socket.setIdentity(id.getBytes(StandardCharsets.UTF_8));
         this.socket.setReceiveTimeOut(SocketHolder.RECEIVETIMEOUT);
+    }
+
+    public ZMsg sendAndReply(ZMsg reqZMsg) throws Exception {
+        ZMsg replyZMsg = null;
+        nTimeouts = -1;
+
+        while (replyZMsg == null) {
+            ++nTimeouts;
+            if (!reqZMsg.send(this.socket)) return null;
+            replyZMsg = this.receiveMsg();
+        }
+        return replyZMsg;
     }
 
     public void reconnect() {

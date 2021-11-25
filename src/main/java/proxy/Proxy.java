@@ -87,10 +87,10 @@ public class Proxy {
                 TopicQueue topicQueue = (TopicQueue) ois.readObject();
                 messageQueues.put(topicName, topicQueue);
             } catch (Exception e) {
+                e.printStackTrace();
                 messageQueues = new ConcurrentHashMap<>();
             }
         }
-
         return messageQueues;
     }
 
@@ -100,7 +100,7 @@ public class Proxy {
 
         for (Map.Entry<String, TopicQueue> entry : this.messageQueues.entrySet()) {
             TopicQueue queue = entry.getValue();
-            if(!queue.isChanged()) continue;
+            if (!queue.isChanged()) continue;
 
             try {
                 File stateFile = new File(stateDirectory.getName() + "/" + entry.getKey());
@@ -220,13 +220,15 @@ public class Proxy {
         IdentifiedMessage reqMsg = new IdentifiedMessage(zMsg);
         String topic = reqMsg.getArg(0);
         String update = reqMsg.getArg(1);
+        String msgId = reqMsg.getArg(2);
         System.out.printf("Put: %s - %s\n", topic, update);
-
         // En-queue message. Silently ignore puts in case the message queue doesn't
         // exist (no one would get the message anyway).
         if (this.messageQueues.containsKey(topic)) {
             TopicQueue queue = this.messageQueues.get(topic);
-            queue.push(update);
+            if (!queue.push(update, msgId, reqMsg.getIdentityStr()))
+                return new IdentifiedMessage(reqMsg.getIdentity(), Publisher.PUTCMD,
+                        Collections.singletonList(Proxy.ERRREPLY)).newZMsg();
         }
 
         return new IdentifiedMessage(reqMsg.getIdentity(), Publisher.PUTCMD,
@@ -304,6 +306,7 @@ public class Proxy {
 
         // if queue doesn't exist => no one has subscribed (including you)
         if (!this.messageQueues.containsKey(topic)) {
+            System.out.println("ola");
             return new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.GETCMD,
                     Collections.singletonList(Proxy.ERRREPLY)).newZMsg();
         }
@@ -311,6 +314,7 @@ public class Proxy {
 
         String id = reqMsg.getIdentityStr();
         if (!queue.isSubbed(id)) {
+            System.out.println("adeus");
             return new IdentifiedMessage(reqMsg.getIdentity(), Subscriber.GETCMD,
                     Collections.singletonList(Proxy.ERRREPLY)).newZMsg();
         }

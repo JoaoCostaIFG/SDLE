@@ -12,6 +12,8 @@ import java.util.Map;
 public class TopicQueue implements Serializable {
     // people that subscribed to this queue
     private final Map<String, QueueNode> subs;
+    // people that publish to this queue
+    private final Map<String, String> pubs;
     // first node
     private transient QueueNode head;
     // last node
@@ -28,13 +30,17 @@ public class TopicQueue implements Serializable {
         this.tail = null;
         this.size = 0;
         this.subs = new HashMap<>();
+        this.pubs = new HashMap<>();
         this.msgId = 0;
         this.wasChanged = true;
     }
 
-    public synchronized void push(String content) {
+    public synchronized boolean push(String content, String receivedMsgId, String pubId) {
+        if (this.pubs.containsKey(pubId) && this.pubs.get(pubId).equals(receivedMsgId)) return false;
+        this.pubs.put(pubId, receivedMsgId);
+
         // no subscribers
-        if (this.subs.size() == 0) return;
+        if (this.subs.size() == 0) return true;
 
         this.wasChanged = true;
 
@@ -52,6 +58,7 @@ public class TopicQueue implements Serializable {
         }
 
         ++this.size;
+        return true;
     }
 
     public synchronized int hasUpdate(String subId) {
@@ -129,14 +136,18 @@ public class TopicQueue implements Serializable {
         return this.subs.containsKey(subId);
     }
 
-    public void resetChange() { this.wasChanged = false; }
+    public void resetChange() {
+        this.wasChanged = false;
+    }
 
-    public boolean isChanged() { return this.wasChanged; }
+    public boolean isChanged() {
+        return this.wasChanged;
+    }
 
 
-    private void writeObject(java.io.ObjectOutputStream out)
-            throws IOException {
+    private void writeObject(java.io.ObjectOutputStream out) throws IOException {
         out.writeObject(subs);
+        out.writeObject(pubs);
         out.writeInt(size);
         out.writeObject(msgId);
 
@@ -146,8 +157,8 @@ public class TopicQueue implements Serializable {
             cur = cur.next;
         }
     }
-    private void readObject(java.io.ObjectInputStream in)
-            throws IOException, ClassNotFoundException {
+
+    private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
 
         try {
             // field subs is final, so we must do this
@@ -160,6 +171,14 @@ public class TopicQueue implements Serializable {
 
             // make the field final again
             subsField.setAccessible(false);
+
+            Field pubsField = this.getClass().getDeclaredField("pubs");
+            // make the field non final
+            pubsField.setAccessible(true);
+            pubsField.set(this, in.readObject());
+
+            // make the field final again
+            pubsField.setAccessible(false);
         } catch (NoSuchFieldException | IllegalAccessException e) {
             System.err.println("The subs map is final, so THIS (gestures broadly) is necessary."
                     + "\nIf this failed, most likely the field was renamed or no longer private.");
@@ -169,14 +188,18 @@ public class TopicQueue implements Serializable {
         size = in.readInt();
         msgId = (Integer) in.readObject();
 
-        head = (QueueNode) in.readObject();
-        QueueNode lastRead = head;
-        for (int i=1; i<size; i++) {
-            QueueNode cur = (QueueNode) in.readObject();
-            lastRead.next = cur;
-            lastRead = cur;
+        if (size > 0) {
+            head = (QueueNode) in.readObject();
+            QueueNode lastRead = head;
+            for (int i = 1; i < size; i++) {
+                QueueNode cur = (QueueNode) in.readObject();
+                lastRead.next = cur;
+                lastRead = cur;
+            }
+            tail = lastRead;
+        } else {
+            head = tail = null;
         }
-        tail = lastRead;
     }
 
 }

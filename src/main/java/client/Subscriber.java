@@ -53,16 +53,6 @@ public class Subscriber extends SocketHolder {
         return reply.getCmd().equals(UNSUBCMD) && reply.getArg(0).equals(Proxy.OKREPLY);
     }
 
-    public ZMsg sendAndReply(ZMsg reqZMsg) throws Exception {
-        ZMsg replyZMsg = null;
-
-        while (replyZMsg == null) {
-            if (!reqZMsg.send(this.socket)) return null;
-            replyZMsg = this.receiveMsg();
-        }
-        return replyZMsg;
-    }
-
     public String get(String topic) throws Exception {
         String content = null;
 

@@ -5,6 +5,7 @@ import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 import proxy.Proxy;
 
+import java.security.NoSuchAlgorithmException;
 import java.util.Random;
 
 public class Proj1 {
@@ -59,7 +60,13 @@ public class Proj1 {
     }
 
     public void doput(String endpoint, String topic, int n) {
-        Publisher p = new Publisher(this.zctx, this.id, endpoint);
+        Publisher p = null;
+        try {
+            p = new Publisher(this.zctx, this.id, endpoint);
+        } catch (NoSuchAlgorithmException e) {
+            System.err.println("Failed to create publisher.");
+            return;
+        }
 
         if (!p.connect()) {
             System.err.printf("Failed connection to proxy: [endpoint=%s]\n", endpoint);
