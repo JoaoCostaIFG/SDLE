@@ -5,6 +5,7 @@ import org.zeromq.ZMsg;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class IdentifiedMessage extends UnidentifiedMessage {
@@ -12,6 +13,11 @@ public class IdentifiedMessage extends UnidentifiedMessage {
 
     public IdentifiedMessage(ZFrame identity, String cmd, List<String> args) {
         super(cmd, args);
+        this.identity = identity;
+    }
+
+    public IdentifiedMessage(ZFrame identity, String cmd) {
+        super(cmd, Collections.emptyList());
         this.identity = identity;
     }
 

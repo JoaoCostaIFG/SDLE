@@ -2,15 +2,13 @@ package org.t3.g11.proj2.keyserver;
 
 import org.sqlite.SQLiteErrorCode;
 import org.t3.g11.proj2.message.IdentifiedMessage;
-import org.zeromq.SocketType;
-import org.zeromq.ZContext;
-import org.zeromq.ZMQ;
-import org.zeromq.ZMsg;
+import org.zeromq.*;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.Objects;
 
 public class KeyServer {
@@ -50,8 +48,8 @@ public class KeyServer {
         ZMsg zMsg = ZMsg.recvMsg(this.socket);
         if (zMsg == null) continue;
         IdentifiedMessage msg = new IdentifiedMessage(zMsg);
-        if (!this.handleMsg(msg))
-          System.err.printf("Failed command: [command=%s]\n", msg.getCmd());
+        ZMsg reply = this.handleMsg(msg);
+        reply.send(this.socket);
       }
     }
   }
@@ -73,22 +71,27 @@ public class KeyServer {
     return true;
   }
 
-  private boolean handleMsg(IdentifiedMessage msg) {
+  private ZMsg handleMsg(IdentifiedMessage msg) {
     String cmd = msg.getCmd();
     if (cmd.equals(KeyServerCMD.REGISTER.toString())) {
       // register
-      if (msg.getArgCount() != 2) return false;
+      if (msg.getArgCount() != 2) {
+        System.err.printf("Unknown command: [command=%s]\n", msg.getCmd());
+        return KeyServerReply.UNKNOWN.getMessage(msg);
+      }
+
       String username = msg.getArg(0);
       String pubkey = msg.getArg(1);
-      return this.register(username, pubkey);
+      if (this.register(username, pubkey)) return KeyServerReply.SUCCESS.getMessage(msg);
+      else return KeyServerReply.FAILURE.getMessage(msg);
     } else if (cmd.equals(KeyServerCMD.LOOKUP.toString())) {
       // lookup
-
-      return true;
+      return KeyServerReply.UNIMPLEMENTED.getMessage(msg);
     }
 
     // unrecognized command
-    return false;
+    System.err.printf("Unknown command: [command=%s]\n", msg.getCmd());
+    return KeyServerReply.UNKNOWN.getMessage(msg);
   }
 
   public static void main(String[] args) {
