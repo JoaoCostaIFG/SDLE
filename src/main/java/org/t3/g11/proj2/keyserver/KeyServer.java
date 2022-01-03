@@ -1,13 +1,15 @@
-package org.t3.g11.proj2;
+package org.t3.g11.proj2.keyserver;
 
+import org.sqlite.SQLiteErrorCode;
+import org.t3.g11.proj2.message.IdentifiedMessage;
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 import org.zeromq.ZMsg;
 
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Objects;
 
@@ -46,11 +48,47 @@ public class KeyServer {
     while (poller.poll() >= 0) {
       if (poller.pollin(0)) {
         ZMsg zMsg = ZMsg.recvMsg(this.socket);
-        System.out.println(zMsg);
         if (zMsg == null) continue;
-        zMsg.send(this.socket);
+        IdentifiedMessage msg = new IdentifiedMessage(zMsg);
+        if (!this.handleMsg(msg))
+          System.err.printf("Failed command: [command=%s]\n", msg.getCmd());
       }
     }
+  }
+
+  private boolean register(String username, String pubkey) {
+    System.out.printf("Registering user: [username=%s], [pubkey=%s]\n", username, pubkey);
+
+    String sql = "INSERT INTO User(user_username, user_pubkey) VALUES(?,?)";
+    try {
+      PreparedStatement pstmt = this.keyDB.prepareStatement(sql);
+      pstmt.setString(1, username);
+      pstmt.setString(2, pubkey);
+      pstmt.executeUpdate();
+    } catch (SQLException throwables) {
+      //SQLiteErrorCode.SQLITE_CONSTRAINT_UNIQUE;
+      return false;
+    }
+
+    return true;
+  }
+
+  private boolean handleMsg(IdentifiedMessage msg) {
+    String cmd = msg.getCmd();
+    if (cmd.equals(KeyServerCMD.REGISTER.toString())) {
+      // register
+      if (msg.getArgCount() != 2) return false;
+      String username = msg.getArg(0);
+      String pubkey = msg.getArg(1);
+      return this.register(username, pubkey);
+    } else if (cmd.equals(KeyServerCMD.LOOKUP.toString())) {
+      // lookup
+
+      return true;
+    }
+
+    // unrecognized command
+    return false;
   }
 
   public static void main(String[] args) {

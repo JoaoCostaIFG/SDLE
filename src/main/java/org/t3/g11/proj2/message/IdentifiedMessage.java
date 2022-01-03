@@ -1,4 +1,4 @@
-package message;
+package org.t3.g11.proj2.message;
 
 import org.zeromq.ZFrame;
 import org.zeromq.ZMsg;
