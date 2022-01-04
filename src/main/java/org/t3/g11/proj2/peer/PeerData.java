@@ -1,9 +1,6 @@
 package org.t3.g11.proj2.peer;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 
 public class PeerData {
     private final Connection connection;
@@ -36,5 +33,41 @@ public class PeerData {
                 )
                 """);
         stmt.close();
+    }
+
+    public void addUser(String username, String pubkey) throws SQLException {
+        PreparedStatement pstmt = this.connection.prepareStatement("INSERT INTO User(user_username, user_pubkey) VALUES(?, ?)");
+        pstmt.setString(1, username);
+        pstmt.setString(2, pubkey);
+        pstmt.executeUpdate();
+        pstmt.close();
+    }
+
+    public void addUserSelf(String pubkey) throws SQLException {
+        this.addUser(this.username, pubkey);
+    }
+
+    public void addPost(int user_id, String content, String ciphered) throws SQLException {
+        PreparedStatement pstmt = this.connection.prepareStatement("INSERT INTO Post(post_content, post_ciphered, user_id) VALUES(?, ?, ?)");
+        pstmt.setString(1, content);
+        pstmt.setString(2, ciphered);
+        pstmt.setInt(3, user_id);
+        pstmt.executeUpdate();
+        pstmt.close();
+    }
+
+    public void addPost(String user_username, String content, String ciphered) throws SQLException {
+        PreparedStatement pstmt = this.connection.prepareStatement("SELECT user_id FROM User WHERE user_username = ?");
+        pstmt.setString(1, user_username);
+        ResultSet res = pstmt.executeQuery();
+        if (!res.next()) throw new SQLException("User " + user_username + " not found");
+        int user_id = res.getInt("user_id");
+        pstmt.close();
+
+        this.addPost(user_id, content, ciphered);
+    }
+
+    public void addPostSelf(String content, String ciphered) throws SQLException {
+        this.addPost(this.username, content, ciphered);
     }
 }

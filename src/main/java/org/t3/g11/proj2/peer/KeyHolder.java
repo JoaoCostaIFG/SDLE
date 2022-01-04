@@ -67,6 +67,14 @@ public class KeyHolder {
         return this.encrypt(buf, this.privateKey);
     }
 
+    public String encryptStr(byte[] buf, PrivateKey privateKey) throws InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+        return Base64.getEncoder().encodeToString(this.encrypt(buf, privateKey));
+    }
+
+    public String encryptStr(byte[] buf) throws IllegalBlockSizeException, BadPaddingException, InvalidKeyException {
+        return Base64.getEncoder().encodeToString(this.encrypt(buf));
+    }
+
     public byte[] decrypt(byte[] buf, PublicKey publicKey) throws InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
         this.cipher.init(Cipher.DECRYPT_MODE, publicKey);
         return this.cipher.doFinal(buf);

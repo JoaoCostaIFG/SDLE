@@ -12,7 +12,6 @@ import org.zeromq.ZMsg;
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
@@ -72,6 +71,7 @@ public class Peer {
             try {
                 this.peerData = new PeerData(username);
                 this.peerData.reInitDB();
+                this.peerData.addUserSelf(KeyHolder.encodeKey(publicKey));
             } catch (SQLException throwables) {
                 throwables.printStackTrace();
                 System.err.println("Failed to create database.");
@@ -110,14 +110,23 @@ public class Peer {
         }
     }
 
-    public void testEncryption() {
-        byte[] buffer = "Padoru".getBytes(StandardCharsets.UTF_8);
+    public boolean newPost(String content) {
+        byte[] cipherBuffer = content.getBytes();
+        String ciphered;
         try {
-            byte[] encrypted = this.keyHolder.encrypt(buffer);
-            System.out.println(new String(this.keyHolder.decrypt(encrypted)));
+            ciphered = this.keyHolder.encryptStr(cipherBuffer);
         } catch (InvalidKeyException | IllegalBlockSizeException | BadPaddingException e) {
-            e.printStackTrace();
+            System.err.println("Failed to encrypt post content.");
+            return false;
         }
+
+        try {
+            this.peerData.addPostSelf(content, ciphered);
+        } catch (SQLException throwables) {
+            System.err.println(throwables.getMessage());
+            return false;
+        }
+        return true;
     }
 
     public static void main(String[] args) {
@@ -178,7 +187,11 @@ public class Peer {
 
                 switch (cmd) {
                     case 'n', 'N':
-                        peer.testEncryption();
+                        System.out.print("Tweet content: ");
+                        System.out.flush();
+                        String content = sc.nextLine();
+                        if (!peer.newPost(content)) System.out.println("Failed to create post.");
+                        else System.out.println("Post created.");
                         break;
                     case 'q', 'Q':
                         System.err.println("Quitting...");

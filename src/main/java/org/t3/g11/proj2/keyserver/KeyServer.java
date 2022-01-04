@@ -89,7 +89,7 @@ public class KeyServer {
         System.out.printf("Registering user: [username=%s], [pubkey=%s]\n",
                 username, pubkey.substring(0, 12));
 
-        String sql = "INSERT INTO User(user_username, user_pubkey) VALUES(?,?)";
+        String sql = "INSERT INTO User(user_username, user_pubkey) VALUES(?, ?)";
         try {
             PreparedStatement pstmt = this.keyDB.prepareStatement(sql);
             pstmt.setString(1, username);
