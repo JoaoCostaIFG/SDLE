@@ -8,29 +8,29 @@ import org.zeromq.ZMsg;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.sql.Connection;
-import java.sql.DriverManager;
+import java.security.KeyPairGenerator;
+import java.security.SecureRandom;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 
 public class KeyServer {
   public static final String ENDPOINT = "tcp://localhost:8080";
+  public static final String KEYINSTANCE = "RSA";
+  public static final int KEYSIZE = 4096;
 
   private static final String workersPushEndpoint = "inproc://workersPush";
   private static final String workersPullEndpoint = "inproc://workersPull";
   private static final String DBRESOURCE = "keyserver.db";
 
-  private final ZContext zctx;
   private final Connection keyDB;
+  private final ZContext zctx;
   private final ZMQ.Socket socket;
   private final ZMQ.Socket workersPush;
   private final ZMQ.Socket workersPull;
-
   private final List<Thread> workers;
 
   public KeyServer(ZContext zctx) throws Exception {
-    this.zctx = zctx;
-
     // connect to db
     String url = "jdbc:sqlite:";
     URL resourcePath = getClass().getClassLoader().getResource(KeyServer.DBRESOURCE);
@@ -42,6 +42,7 @@ public class KeyServer {
       this.keyDB = DriverManager.getConnection(url);
     }
 
+    this.zctx = zctx;
     // open socket
     this.socket = zctx.createSocket(SocketType.ROUTER);
     this.socket.bind(KeyServer.ENDPOINT);
@@ -49,16 +50,15 @@ public class KeyServer {
     // internal communication between threads to distribute work
     this.workersPush = zctx.createSocket(SocketType.PUSH);
     this.workersPush.bind(workersPushEndpoint);
-
     this.workersPull = zctx.createSocket(SocketType.PULL);
     this.workersPull.bind(workersPullEndpoint);
-
+    // workers
     int maxThreads = Runtime.getRuntime().availableProcessors() + 1;
     this.workers = new ArrayList<>();
     for (int i = 0; i < maxThreads; ++i) {
       KeyServerWorker w = new KeyServerWorker(
               zctx,
-              this.keyDB,
+              this,
               workersPushEndpoint,
               workersPullEndpoint
       );
@@ -84,6 +84,40 @@ public class KeyServer {
         if (zMsg == null) continue;
         zMsg.send(this.socket);
       }
+    }
+  }
+
+  protected boolean register(String username, String pubkey) {
+    System.out.printf("Registering user: [username=%s], [pubkey=%s]\n",
+            username, pubkey.substring(0, 12));
+
+    String sql = "INSERT INTO User(user_username, user_pubkey) VALUES(?,?)";
+    try {
+      PreparedStatement pstmt = this.keyDB.prepareStatement(sql);
+      pstmt.setString(1, username);
+      pstmt.setString(2, pubkey);
+      pstmt.executeUpdate();
+    } catch (SQLException throwables) {
+      //SQLiteErrorCode.SQLITE_CONSTRAINT_UNIQUE;
+      return false;
+    }
+
+    return true;
+  }
+
+  protected String lookup(String username) {
+    System.out.printf("Looking-up user: [username=%s]\n", username);
+
+    String sql = "SELECT user_pubkey FROM User WHERE user_username = ?";
+    try {
+      PreparedStatement pstmt = this.keyDB.prepareStatement(sql);
+      pstmt.setString(1, username);
+      ResultSet res = pstmt.executeQuery();
+      if (!res.next()) return null;
+      return res.getString("user_pubkey");
+    } catch (SQLException throwables) {
+      //SQLiteErrorCode.SQLITE_CONSTRAINT_UNIQUE;
+      return null;
     }
   }
 
