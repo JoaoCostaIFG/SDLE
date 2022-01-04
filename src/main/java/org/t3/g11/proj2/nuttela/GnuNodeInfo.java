@@ -1,4 +1,4 @@
-package org.t3.g11.proj2;
+package org.t3.g11.proj2.nuttela;
 
 public class GnuNodeInfo {
     public int nNeighbors;

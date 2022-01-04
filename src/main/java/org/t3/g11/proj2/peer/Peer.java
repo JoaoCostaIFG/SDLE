@@ -1,10 +1,10 @@
 package org.t3.g11.proj2.peer;
 
-import org.t3.g11.proj2.GnuNode;
 import org.t3.g11.proj2.keyserver.KeyServer;
 import org.t3.g11.proj2.keyserver.KeyServerCMD;
 import org.t3.g11.proj2.keyserver.KeyServerReply;
 import org.t3.g11.proj2.message.UnidentifiedMessage;
+import org.t3.g11.proj2.nuttela.GnuNode;
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
@@ -29,9 +29,9 @@ public class Peer {
     private String username;
     private final KeyHolder keyHolder;
     private final GnuNode node;
+    private final Thread nodeT;
 
     public Peer(ZContext zctx, GnuNode node) throws Exception {
-        this.node = node;
         this.zctx = zctx;
         this.ksSocket = zctx.createSocket(SocketType.REQ);
         if (!this.ksSocket.connect(KeyServer.ENDPOINT)) {
@@ -41,6 +41,13 @@ public class Peer {
 
         this.authenticated = false;
         this.keyHolder = new KeyHolder(KeyServer.KEYINSTANCE);
+
+        this.node = node;
+        this.nodeT = new Thread(this.node);
+    }
+
+    public void startNode() {
+        this.nodeT.start();
     }
 
     public boolean register(String username) {
@@ -127,14 +134,14 @@ public class Peer {
     }
 
     public static void main(String[] args) {
-        ZContext zctx = new ZContext();
-
         if (args.length < 2) {
-            System.out.println("Usage: org.t3.g11.proj2.Proj2 <id> <routerAdd>");
+            System.out.println("Usage: Peer <id> <routerAdd>");
             return;
         }
 
-        GnuNode node = new GnuNode(args[0], args[1], args[2]);
+        // TODO hash username
+        ZContext zctx = new ZContext();
+        GnuNode node = new GnuNode(zctx, args[0], args[1]);
         Peer peer;
         try {
             peer = new Peer(zctx, node);
@@ -171,7 +178,7 @@ public class Peer {
                         break;
                     case 'l', 'L':
                         // for testing
-                        peer.node.init();
+                        peer.startNode();
                         peer.authenticated = true;
                         break;
                     case 'q', 'Q':
@@ -203,6 +210,8 @@ public class Peer {
                         break;
                     case 'q', 'Q':
                         System.err.println("Quitting...");
+                        // TODO
+                        peer.nodeT.interrupt();
                         break event_loop;
                     default:
                         System.err.println("Unknown command...");
