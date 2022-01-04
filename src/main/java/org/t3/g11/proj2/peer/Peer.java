@@ -141,7 +141,7 @@ public class Peer {
 
         // TODO hash username
         ZContext zctx = new ZContext();
-        GnuNode node = new GnuNode(zctx, args[0], args[1]);
+        GnuNode node = new GnuNode(zctx, Integer.parseInt(args[0]), args[1]);
         Peer peer;
         try {
             peer = new Peer(zctx, node);

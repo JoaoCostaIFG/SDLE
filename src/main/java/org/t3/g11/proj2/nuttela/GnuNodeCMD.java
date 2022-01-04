@@ -7,14 +7,14 @@ import java.util.Collections;
 import java.util.List;
 
 public enum GnuNodeCMD {
-    NEIGH,
+    NEIGH, // id, address, n_neigh, capacity
     NUMNEIGH,
-    MYNEIGH,
-    NEIGHOK,
+    MYNEIGH, // n_neigh
+    NEIGHOK, // id, capacity
     NEIGHERR,
     DROPOK,
     DROPERR,
-    DROP,
+    DROP, // id, address
     PING,
     PONG,
     PUSH,
