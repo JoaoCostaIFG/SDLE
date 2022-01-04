@@ -32,6 +32,7 @@ public class PeerData {
                   FOREIGN KEY(user_id) REFERENCES User
                 )
                 """);
+        stmt.execute("CREATE INDEX post_idx ON Post(post_date)");
         stmt.close();
     }
 

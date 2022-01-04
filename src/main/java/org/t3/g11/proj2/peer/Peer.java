@@ -66,8 +66,16 @@ public class Peer {
                 KeyHolder.writeKeyToFile(privateKey, username);
             } catch (IOException e) {
                 System.err.printf("Failed to save user's private key to a file. Here it is:\n%s\n",
-                        KeyHolder.encodeKey(privateKey));
+                    KeyHolder.encodeKey(privateKey));
             }
+
+            try {
+                KeyHolder.writeKeyToFile(publicKey, username);
+            } catch (IOException e) {
+                System.err.printf("Failed to save user's public key to a file. Here it is:\n%s\n",
+                        KeyHolder.encodeKey(publicKey));
+            }
+
             try {
                 this.peerData = new PeerData(username);
                 this.peerData.reInitDB();
@@ -85,6 +93,30 @@ public class Peer {
         }
 
         return this.authenticated;
+    }
+
+    public boolean authenticate(String username) {
+        this.authenticated = false;
+
+        try {
+            this.keyHolder.importKeysFromFile(username);
+        } catch (IOException | InvalidKeySpecException e) {
+            e.printStackTrace();
+            return false;
+        }
+
+        try {
+            this.peerData = new PeerData(username);
+            this.peerData.addUserSelf(KeyHolder.encodeKey(keyHolder.getPublicKey()));
+        } catch (SQLException throwables) {
+            throwables.printStackTrace();
+            System.err.println("Failed to open user database.");
+            this.keyHolder.clear();
+            return false;
+        }
+
+        this.authenticated = true;
+        return true;
     }
 
     public PublicKey lookup(String username) {
@@ -129,6 +161,82 @@ public class Peer {
         return true;
     }
 
+
+
+    private static boolean notAuthLoop(Peer peer) {
+        Scanner sc = new Scanner(System.in);
+
+        while (true) {
+            System.out.print("""
+                    r - Register
+                    l - Login
+                    q - quit
+                    """);
+            System.out.flush();
+            String nextLine = sc.nextLine();
+            if (nextLine.length() <= 0) continue;
+            char cmd = nextLine.charAt(0);
+
+            String username;
+            switch (cmd) {
+                case 'r', 'R':
+                    // TODO this username is random each time!!!!!!!
+                    byte[] buf = new byte[12];
+                    new Random().nextBytes(buf);
+                    username = new String(Base64.getEncoder().encode(buf)).replaceAll("/", "");
+                    if (!peer.register(username)) {
+                        System.out.println("Register failed");
+                    } else {
+                        System.out.println("Authenticated as " + username);
+                    }
+                    return true;
+                case 'l', 'L':
+                    username = sc.nextLine();
+                    if (!peer.authenticate(username)) {
+                        System.out.println("Login failed");
+                    } else {
+                        System.out.println("Logged in as " + username);
+                    }
+                    return true;
+                case 'q', 'Q':
+                    return false;
+                default:
+                    System.err.println("Unknown command...");
+                    break;
+            }
+        }
+    }
+
+    private static boolean authLoop(Peer peer) {
+        Scanner sc = new Scanner(System.in);
+
+        while (true) {
+            System.out.print("""
+                    n - New post
+                    q - quit
+                    """);
+            System.out.flush();
+            String nextLine = sc.nextLine();
+            if (nextLine.length() <= 0) continue;
+            char cmd = nextLine.charAt(0);
+
+            switch (cmd) {
+                case 'n', 'N':
+                    System.out.print("Tweet content: ");
+                    System.out.flush();
+                    String content = sc.nextLine();
+                    if (!peer.newPost(content)) System.out.println("Failed to create post.");
+                    else System.out.println("Post created.");
+                    break;
+                case 'q', 'Q':
+                    return false;
+                default:
+                    System.err.println("Unknown command...");
+                    break;
+            }
+        }
+    }
+
     public static void main(String[] args) {
         ZContext zctx = new ZContext();
 
@@ -140,67 +248,14 @@ public class Peer {
             return;
         }
 
-        Scanner sc = new Scanner(System.in);
-        event_loop:
-        while (true) {
-            if (!peer.authenticated) {
-                System.out.print("""
-                        r - Register
-                        l - Login
-                        q - quit
-                        """);
-                System.out.flush();
-                String nextLine = sc.nextLine();
-                if (nextLine.length() <= 0) continue;
-                char cmd = nextLine.charAt(0);
+        if (!notAuthLoop(peer)) {
+            System.err.println("Quitting...");
+            System.exit(0);
+        }
 
-                switch (cmd) {
-                    case 'r', 'R':
-                        // TODO this username is random each time!!!!!!!
-                        byte[] buf = new byte[12];
-                        new Random().nextBytes(buf);
-                        String username = new String(Base64.getEncoder().encode(buf)).replaceAll("/", "");
-                        if (!peer.register(username)) {
-                            System.out.println("Register failed");
-                        } else {
-                            System.out.println("Authenticated as " + username);
-                        }
-                        break;
-                    case 'l', 'L':
-                        break;
-                    case 'q', 'Q':
-                        System.err.println("Quitting...");
-                        break event_loop;
-                    default:
-                        System.err.println("Unknown command...");
-                        continue event_loop;
-                }
-            } else {
-                System.out.print("""
-                        n - New post
-                        q - quit
-                        """);
-                System.out.flush();
-                String nextLine = sc.nextLine();
-                if (nextLine.length() <= 0) continue;
-                char cmd = nextLine.charAt(0);
-
-                switch (cmd) {
-                    case 'n', 'N':
-                        System.out.print("Tweet content: ");
-                        System.out.flush();
-                        String content = sc.nextLine();
-                        if (!peer.newPost(content)) System.out.println("Failed to create post.");
-                        else System.out.println("Post created.");
-                        break;
-                    case 'q', 'Q':
-                        System.err.println("Quitting...");
-                        break event_loop;
-                    default:
-                        System.err.println("Unknown command...");
-                        continue event_loop;
-                }
-            }
+        if (!authLoop(peer)) {
+            System.err.println("Quitting...");
+            System.exit(0);
         }
     }
 }
