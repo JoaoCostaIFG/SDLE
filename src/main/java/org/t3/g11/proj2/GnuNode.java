@@ -1,13 +1,17 @@
 package org.t3.g11.proj2;
 
 import org.t3.g11.proj2.message.Descriptor;
-import org.t3.g11.proj2.message.UnidentifiedMessage;
 import org.t3.g11.proj2.message.IdentifiedMessage;
-import org.zeromq.*;
+import org.t3.g11.proj2.message.UnidentifiedMessage;
+import org.zeromq.SocketType;
+import org.zeromq.ZContext;
+import org.zeromq.ZMQ;
+import org.zeromq.ZMsg;
 
 import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public class GnuNode {
@@ -21,7 +25,7 @@ public class GnuNode {
     public static final String DROP = "DROP";
 
     public static final int PING_FREQ = 5;
-    public static final int MAX_NEIGH = 3;
+    public static final int MAX_NEIGH = 2;
 
     private final HashMap<String, Integer> neigh;
     private final String id;
@@ -29,11 +33,13 @@ public class GnuNode {
     private final ZMQ.Socket dealerSock;
     private final ZMQ.Socket routerSock;
     private final String routerSockIP;
+    private List<String> deadNeighbors;
 
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     public GnuNode(String id, String dealerIP, String routerIP) {
         this.id = id;
+        deadNeighbors = new ArrayList<>();
         this.zctx = new ZContext();
         this.dealerSock = zctx.createSocket(SocketType.DEALER);
         this.routerSock = zctx.createSocket(SocketType.ROUTER);
@@ -48,15 +54,15 @@ public class GnuNode {
     }
 
     public boolean pickNeighborToDrop(String newNeigh) {
-
         ZMsg msg = new UnidentifiedMessage(GnuNode.NUMNEIGH, new ArrayList<>()).newZMsg();
         ZMQ.Socket skt = this.zctx.createSocket(SocketType.REQ);
+        skt.connect(newNeigh);
         msg.send(skt);
         UnidentifiedMessage reply = new UnidentifiedMessage(ZMsg.recvMsg(skt));
 
         int n_neigh = Integer.parseInt(reply.getArg(0));
 
-        if (this.neigh.size() + 1 < GnuNode.MAX_NEIGH) {
+        if (this.neigh.size() + 1 <= GnuNode.MAX_NEIGH) {
             // we have room
             ZMsg neighMsg = new UnidentifiedMessage(GnuNode.NEIGH, Arrays.asList(this.routerSockIP, String.valueOf(this.neigh.size()))).newZMsg();
             neighMsg.send(skt);
@@ -72,8 +78,8 @@ public class GnuNode {
         } else {
             String highestNeigh = Collections.max(neigh.entrySet(),
                     Comparator.comparingInt(Map.Entry::getValue)).getKey();
-
-            if (this.neigh.get(highestNeigh) > n_neigh) {
+            System.out.println("Highest: " + this.neigh.get(highestNeigh) + "  Local: " + (n_neigh + 1));
+            if (this.neigh.get(highestNeigh) > n_neigh + 1) {
                 ZMsg neighMsg = new UnidentifiedMessage(GnuNode.NEIGH, Arrays.asList(this.routerSockIP, String.valueOf(this.neigh.size()))).newZMsg();
                 neighMsg.send(skt);
                 UnidentifiedMessage um = new UnidentifiedMessage(ZMsg.recvMsg(skt));
@@ -93,7 +99,9 @@ public class GnuNode {
     }
 
     private void bootstrap() {
+        if (this.id.equals("1")) return;
 
+        this.pickNeighborToDrop("tcp://*:8081");
     }
 
     public void send(String toSend) {
@@ -107,9 +115,8 @@ public class GnuNode {
     }
 
     public String receive() {
-        System.out.println("waiting message");
 
-        ZMQ.Poller plr = zctx.createPoller(1);
+        ZMQ.Poller plr = zctx.createPoller(2);
         plr.register(this.routerSock, ZMQ.Poller.POLLIN);
         plr.register(this.dealerSock, ZMQ.Poller.POLLIN);
 
@@ -118,12 +125,14 @@ public class GnuNode {
                 IdentifiedMessage msg = new IdentifiedMessage(ZMsg.recvMsg(this.routerSock));
                 String type = msg.getCmd();
                 ZMsg reply;
+                System.out.println("RECEIVED " + type + " CMD");
                 switch (type) {
                     case GnuNode.NUMNEIGH -> {
                         reply = new IdentifiedMessage(msg.getIdentity(), GnuNode.MYNEIGH, Collections.singletonList(String.valueOf(this.neigh.size()))).newZMsg();
                         reply.send(this.routerSock);
                     }
                     case GnuNode.NEIGH -> {
+
                         boolean neighOk = this.handleNeigh(msg);
                         if (neighOk) {
                             reply = new IdentifiedMessage(msg.getIdentity(), GnuNode.NEIGHOK, new ArrayList<>()).newZMsg();
@@ -151,27 +160,9 @@ public class GnuNode {
                         List<String> addresses = new ArrayList<>(List.of(this.routerSockIP));
                         addresses.addAll(this.neigh.keySet());
                         reply = new IdentifiedMessage(msg.getIdentity(), Descriptor.PONG, addresses).newZMsg();
-                        ZMQ.Socket sock = this.zctx.createSocket(SocketType.REQ);
-                        sock.connect(msg.getArg(3)); //address of sender
-                        reply.send(sock);
-                        sock.close();
-                    }
-                    case Descriptor.PONG -> {
-                        Set<String> unkownAdds = new HashSet<>();
-                        for (int i = 0; i < msg.getArgCount(); ++i) {
-                            String address = msg.getArg(i);
-                            if (!this.neigh.containsKey(address)) {
-                                unkownAdds.add(address);
-                            }
-                        }
-
-                        // TODO: only do this periodically
-                        for (String newNeighbor : unkownAdds) {
-                            this.pickNeighborToDrop(newNeighbor);
-                        }
+                        reply.send(this.routerSock);
                     }
                 }
-
             }
         }
         return "";
@@ -191,7 +182,7 @@ public class GnuNode {
                 maxEntry = entry;
             }
         }
-        if (maxEntry.getValue() > Integer.parseInt(um.getArg(1))) {
+        if (maxEntry.getValue() > Integer.parseInt(um.getArg(1)) + 1) {
             ZMQ.Socket skt = this.zctx.createSocket(SocketType.REQ);
             skt.connect(maxEntry.getKey());
             ZMsg toSend = new UnidentifiedMessage("DROP", Collections.singletonList(this.routerSockIP)).newZMsg();
@@ -207,22 +198,52 @@ public class GnuNode {
     }
 
     private void ping() {
-        List<String> pingArgs = List.of(this.id, "0", String.valueOf(Descriptor.PING_TTL), this.routerSockIP);
-        Descriptor pingMsg = new Descriptor(Descriptor.PING, pingArgs);
-        List<String> deadNeighbors = new ArrayList<>();
-
-        for (String neighborAdd : this.neigh.keySet()) {
-            ZMQ.Socket sock = zctx.createSocket(SocketType.REQ);
-            if (!sock.connect(neighborAdd)) {
-                deadNeighbors.add(neighborAdd);
-                continue;
-            }
-            sock.connect(neighborAdd);
-            pingMsg.newZMsg().send(sock);
-        }
-
         for (String s : deadNeighbors) {
             this.neigh.remove(s);
+        }
+
+        System.out.println("My Neighbors:");
+        for (Map.Entry<String, Integer> entry : this.neigh.entrySet()) {
+            System.out.println("\t- " + entry.getKey());
+        }
+        List<String> pingArgs = List.of(this.id, "0", String.valueOf(Descriptor.PING_TTL), this.routerSockIP);
+        Descriptor pingMsg = new Descriptor(Descriptor.PING, pingArgs);
+
+        ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newCachedThreadPool();
+
+        for (String neighborAdd : this.neigh.keySet()) {
+            this.deadNeighbors.add(neighborAdd);
+            executor.submit(() -> {
+                ZMQ.Socket sock = zctx.createSocket(SocketType.REQ);
+                if (!sock.connect(neighborAdd)) {
+                    deadNeighbors.add(neighborAdd);
+                    return;
+                }
+                sock.connect(neighborAdd);
+                pingMsg.newZMsg().send(sock);
+
+                UnidentifiedMessage reply = new UnidentifiedMessage(ZMsg.recvMsg(sock));
+
+                if (!reply.getCmd().equals("PONG")) return;
+                System.out.println("Received PONG cmd");
+
+                Set<String> unknownAdds = new HashSet<>();
+                this.neigh.put(neighborAdd, reply.getArgCount() - 1);
+                for (int i = 0; i < reply.getArgCount(); ++i) {
+                    String address = reply.getArg(i);
+                    if (address.equals(this.routerSockIP))
+                        continue;
+                    if (!this.neigh.containsKey(address))
+                        unknownAdds.add(address);
+                }
+
+                // TODO: only do this periodically
+                for (String newNeighbor : unknownAdds) {
+                    this.pickNeighborToDrop(newNeighbor);
+                }
+
+                this.deadNeighbors.remove(neighborAdd);
+            });
         }
     }
 }

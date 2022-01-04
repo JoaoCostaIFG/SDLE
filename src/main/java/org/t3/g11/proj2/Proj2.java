@@ -9,11 +9,6 @@ public class Proj2 {
 
     GnuNode node = new GnuNode(args[0], args[1], args[2]);
 
-    try {
-      if (args[0].equals("1")) node.send("Hello");
-      else node.receive();
-    } catch(Exception e){
-      e.printStackTrace();
-    }
+    node.receive();
   }
 }
