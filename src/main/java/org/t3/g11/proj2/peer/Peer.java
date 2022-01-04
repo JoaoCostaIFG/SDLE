@@ -8,16 +8,17 @@ import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
 import org.zeromq.ZMsg;
-import zmq.socket.pubsub.Pub;
 
 import javax.crypto.BadPaddingException;
-import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
-import javax.crypto.NoSuchPaddingException;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.security.spec.InvalidKeySpecException;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Random;
+import java.util.Scanner;
 
 public class Peer {
   private final ZContext zctx;
@@ -68,6 +69,12 @@ public class Peer {
       this.username = username;
       this.keyHolder.setPrivateKey(privateKey);
       this.keyHolder.setPublicKey(publicKey);
+      try {
+        KeyHolder.writeKeyToFile(privateKey, username);
+      } catch (IOException e) {
+        System.err.printf("Failed to save user's private key to a file. Here it is:\n%s\n",
+                KeyHolder.encodeKey(privateKey));
+      }
       this.authenticated = true;
     } else {
       // failure

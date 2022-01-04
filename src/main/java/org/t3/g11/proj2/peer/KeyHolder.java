@@ -1,12 +1,11 @@
 package org.t3.g11.proj2.peer;
 
-import org.t3.g11.proj2.keyserver.KeyServer;
-import zmq.socket.pubsub.Pub;
-
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.security.*;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
@@ -76,7 +75,10 @@ public class KeyHolder {
     return Base64.getEncoder().encodeToString(key.getEncoded());
   }
 
-  public static void writeKeyToFile(Key key) {
-
+  public static void writeKeyToFile(Key key, String username) throws IOException {
+    byte[] encoded = key.getEncoded();
+    FileOutputStream keyfos = new FileOutputStream(username + ".priv");
+    keyfos.write(encoded);
+    keyfos.close();
   }
 }
