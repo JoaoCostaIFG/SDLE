@@ -6,6 +6,9 @@ import org.t3.g11.proj2.message.IdentifiedMessage;
 import org.zeromq.*;
 
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class GnuNode {
     public static final String NEIGH = "NEIGH";
@@ -17,13 +20,17 @@ public class GnuNode {
     public static final String DROPERR = "DROPERR";
     public static final String DROP = "DROP";
 
+    public static final int PING_FREQ = 5;
     public static final int MAX_NEIGH = 3;
+
     private final HashMap<String, Integer> neigh;
     private final String id;
     private final ZContext zctx;
     private final ZMQ.Socket dealerSock;
     private final ZMQ.Socket routerSock;
     private final String routerSockIP;
+
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     public GnuNode(String id, String dealerIP, String routerIP) {
         this.id = id;
@@ -36,6 +43,8 @@ public class GnuNode {
         this.neigh = new HashMap<>();
 
         this.bootstrap();
+
+        scheduler.scheduleAtFixedRate(this::ping, 1, PING_FREQ, TimeUnit.SECONDS);
     }
 
     public boolean pickNeighborToDrop(String newNeigh) {
