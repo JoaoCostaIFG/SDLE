@@ -15,7 +15,7 @@ public class IdentifiedMessage extends UnidentifiedMessage {
         super(cmd, args);
         this.identity = identity;
     }
-    
+
     public IdentifiedMessage(ZFrame identity, String cmd) {
         super(cmd, Collections.emptyList());
         this.identity = identity;

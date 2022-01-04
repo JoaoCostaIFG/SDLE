@@ -9,10 +9,7 @@ import org.zeromq.ZMQ;
 import org.zeromq.ZMsg;
 
 import java.util.*;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 public class GnuNode {
     public static final String NEIGH = "NEIGH";
@@ -27,36 +24,49 @@ public class GnuNode {
     public static final int PING_FREQ = 5;
     public static final int MAX_NEIGH = 2;
 
-    private final HashMap<String, Integer> neigh;
+    private final HashMap<String, GnuNodeInfo> neigh;
     private final String id;
-    private final ZContext zctx;
-    private final ZMQ.Socket dealerSock;
+    private ZContext zctx;
     private final ZMQ.Socket routerSock;
+    private final ZMQ.Socket dealerSock;
     private final String routerSockIP;
-    private List<String> deadNeighbors;
+    private final List<String> deadNeighbors;
+    private final int capacity;
 
+    private final ExecutorService receiver = Executors.newSingleThreadExecutor();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+    private final ExecutorService sender = Executors.newFixedThreadPool(GnuNode.MAX_NEIGH);
 
-    public GnuNode(String id, String dealerIP, String routerIP) {
+    public GnuNode(String id, String routerIP, String dealerIP) {
         this.id = id;
         deadNeighbors = new ArrayList<>();
-        this.zctx = new ZContext();
-        this.dealerSock = zctx.createSocket(SocketType.DEALER);
-        this.routerSock = zctx.createSocket(SocketType.ROUTER);
-        this.dealerSock.bind(dealerIP);
-        this.routerSockIP = routerIP;
-        this.routerSock.bind(routerIP);
         this.neigh = new HashMap<>();
+        this.routerSockIP = routerIP;
+        this.zctx = new ZContext();
 
+        this.routerSock = zctx.createSocket(SocketType.ROUTER);
+        this.routerSock.bind(this.routerSockIP);
+
+        this.dealerSock = zctx.createSocket(SocketType.DEALER);
+        this.dealerSock.bind(dealerIP);
+
+        this.capacity = (int) ((Math.random() * (10 - 2)) + 2);
+    }
+
+    public void init() {
         this.bootstrap();
-
         scheduler.scheduleAtFixedRate(this::ping, 1, PING_FREQ, TimeUnit.SECONDS);
+        this.receive();
     }
 
     public boolean pickNeighborToDrop(String newNeigh) {
         ZMsg msg = new UnidentifiedMessage(GnuNode.NUMNEIGH, new ArrayList<>()).newZMsg();
         ZMQ.Socket skt = this.zctx.createSocket(SocketType.REQ);
-        skt.connect(newNeigh);
+        try {
+            skt.connect(newNeigh);
+        } catch (Exception e) {
+            System.err.println("Failed to connect to endpoint!");
+        }
         msg.send(skt);
         UnidentifiedMessage reply = new UnidentifiedMessage(ZMsg.recvMsg(skt));
 
@@ -64,12 +74,13 @@ public class GnuNode {
 
         if (this.neigh.size() + 1 <= GnuNode.MAX_NEIGH) {
             // we have room
-            ZMsg neighMsg = new UnidentifiedMessage(GnuNode.NEIGH, Arrays.asList(this.routerSockIP, String.valueOf(this.neigh.size()))).newZMsg();
+            ZMsg neighMsg = new UnidentifiedMessage(GnuNode.NEIGH,
+                    Arrays.asList(this.routerSockIP, String.valueOf(this.neigh.size()), String.valueOf(this.capacity))).newZMsg();
             neighMsg.send(skt);
             UnidentifiedMessage um = new UnidentifiedMessage(ZMsg.recvMsg(skt));
             skt.close();
             if (um.getCmd().equals(GnuNode.NEIGHOK)) {
-                this.neigh.put(newNeigh, n_neigh);
+                this.neigh.put(newNeigh, new GnuNodeInfo(n_neigh, Integer.parseInt(um.getArg(0))));
                 return true;
             } else {
                 return false;
@@ -77,16 +88,17 @@ public class GnuNode {
 
         } else {
             String highestNeigh = Collections.max(neigh.entrySet(),
-                    Comparator.comparingInt(Map.Entry::getValue)).getKey();
-            System.out.println("Highest: " + this.neigh.get(highestNeigh) + "  Local: " + (n_neigh + 1));
-            if (this.neigh.get(highestNeigh) > n_neigh + 1) {
-                ZMsg neighMsg = new UnidentifiedMessage(GnuNode.NEIGH, Arrays.asList(this.routerSockIP, String.valueOf(this.neigh.size()))).newZMsg();
+                    Comparator.comparingInt(v -> ((GnuNodeInfo) v).nNeighbors)).getKey();
+//            System.out.println("Highest: " + this.neigh.get(highestNeigh) + "  Local: " + (n_neigh + 1));
+            if (this.neigh.get(highestNeigh).capacity > n_neigh + 1) {
+                ZMsg neighMsg = new UnidentifiedMessage(GnuNode.NEIGH,
+                        Arrays.asList(this.routerSockIP, String.valueOf(this.neigh.size()), String.valueOf(this.capacity))).newZMsg();
                 neighMsg.send(skt);
                 UnidentifiedMessage um = new UnidentifiedMessage(ZMsg.recvMsg(skt));
                 skt.close();
                 if (um.getCmd().equals(GnuNode.NEIGHOK)) {
                     this.neigh.remove(highestNeigh);
-                    this.neigh.put(newNeigh, n_neigh);
+                    this.neigh.put(newNeigh, new GnuNodeInfo(n_neigh, Integer.parseInt(um.getArg(0))));
                     return true;
                 } else {
                     return false;
@@ -104,68 +116,82 @@ public class GnuNode {
         this.pickNeighborToDrop("tcp://*:8081");
     }
 
-    public void send(String toSend) {
-//        ZMsg msg = new ZMsg();
-//        msg.add("Ola");
-//        System.out.println("sending");
-//        msg.send(this.dealerSock);
-//        System.out.println("sent");
-//        ZMsg replyZMsg = ZMsg.recvMsg(this.dealerSock);
-//        System.out.println(replyZMsg.toString());
+    public void send(String toSend, String currentHop) {
+        ZMsg msg = new Descriptor("QUERY", Arrays.asList(this.id, currentHop, String.valueOf(Descriptor.MAX_TTL), toSend)).newZMsg();
+        for (String addrToSend : this.neigh.keySet()) {
+            sender.execute(() -> {
+                int nTries = 0;
+                while (nTries < 5) {
+                    ZMQ.Socket skt = zctx.createSocket(SocketType.REQ);
+                    try {
+                        skt.connect(addrToSend);
+                    } catch (Exception e) {
+                        System.err.println("Failed to connect to endpoint!");
+                    }
+                    msg.send(skt);
+                    UnidentifiedMessage reply = new UnidentifiedMessage(ZMsg.recvMsg(skt));
+                    if (reply.getCmd().equals("QUERYHIT")) return;
+                    else nTries++;
+                }
+            });
+        }
     }
 
-    public String receive() {
+    public void receive() {
+        receiver.execute(() -> {
+            ZMQ.Poller plr = zctx.createPoller(2);
+            plr.register(this.routerSock, ZMQ.Poller.POLLIN);
+            plr.register(this.dealerSock, ZMQ.Poller.POLLIN);
 
-        ZMQ.Poller plr = zctx.createPoller(2);
-        plr.register(this.routerSock, ZMQ.Poller.POLLIN);
-        plr.register(this.dealerSock, ZMQ.Poller.POLLIN);
-
-        while (plr.poll() >= 0) {
-            if (plr.pollin(0)) {
-                IdentifiedMessage msg = new IdentifiedMessage(ZMsg.recvMsg(this.routerSock));
-                String type = msg.getCmd();
-                ZMsg reply;
-                System.out.println("RECEIVED " + type + " CMD");
-                switch (type) {
-                    case GnuNode.NUMNEIGH -> {
-                        reply = new IdentifiedMessage(msg.getIdentity(), GnuNode.MYNEIGH, Collections.singletonList(String.valueOf(this.neigh.size()))).newZMsg();
-                        reply.send(this.routerSock);
-                    }
-                    case GnuNode.NEIGH -> {
-
-                        boolean neighOk = this.handleNeigh(msg);
-                        if (neighOk) {
-                            reply = new IdentifiedMessage(msg.getIdentity(), GnuNode.NEIGHOK, new ArrayList<>()).newZMsg();
-                            reply.send(this.routerSock);
-                            this.neigh.put(msg.getArg(0), Integer.parseInt(msg.getArg(1)));
-                        } else {
-                            reply = new IdentifiedMessage(msg.getIdentity(), GnuNode.NEIGHERR, new ArrayList<>()).newZMsg();
-                            reply.send(this.routerSock);
+            while (plr.poll() >= 0) {
+                if (plr.pollin(0)) {
+                    IdentifiedMessage msg = new IdentifiedMessage(ZMsg.recvMsg(this.routerSock));
+                    String type = msg.getCmd();
+                    ZMsg reply;
+//                    System.out.println("RECEIVED " + type + " CMD");
+                    switch (type) {
+                        case GnuNode.NUMNEIGH -> {
+                            reply = new IdentifiedMessage(msg.getIdentity(), GnuNode.MYNEIGH, Collections.singletonList(String.valueOf(this.neigh.size()))).newZMsg();
                             reply.send(this.routerSock);
                         }
-                    }
-                    case GnuNode.DROP -> {
-                        boolean canDrop = this.handleDrop();
-                        if (canDrop) {
-                            reply = new IdentifiedMessage(msg.getIdentity(), GnuNode.DROPOK, new ArrayList<>()).newZMsg();
-                            reply.send(this.routerSock);
-                            this.neigh.remove(msg.getArg(0));
+                        case GnuNode.NEIGH -> {
 
-                        } else {
-                            reply = new IdentifiedMessage(msg.getIdentity(), GnuNode.DROPERR, new ArrayList<>()).newZMsg();
+                            boolean neighOk = this.handleNeigh(msg);
+                            if (neighOk) {
+                                reply = new IdentifiedMessage(msg.getIdentity(), GnuNode.NEIGHOK, new ArrayList<>(this.capacity)).newZMsg();
+                                reply.send(this.routerSock);
+                                this.neigh.put(msg.getArg(0), new GnuNodeInfo(Integer.parseInt(msg.getArg(1)), Integer.parseInt(msg.getArg(1))));
+                            } else {
+                                reply = new IdentifiedMessage(msg.getIdentity(), GnuNode.NEIGHERR, new ArrayList<>()).newZMsg();
+                                reply.send(this.routerSock);
+                                reply.send(this.routerSock);
+                            }
+                        }
+                        case GnuNode.DROP -> {
+                            boolean canDrop = this.handleDrop();
+                            if (canDrop) {
+                                reply = new IdentifiedMessage(msg.getIdentity(), GnuNode.DROPOK, new ArrayList<>()).newZMsg();
+                                reply.send(this.routerSock);
+                                this.neigh.remove(msg.getArg(0));
+
+                            } else {
+                                reply = new IdentifiedMessage(msg.getIdentity(), GnuNode.DROPERR, new ArrayList<>()).newZMsg();
+                                reply.send(this.routerSock);
+                            }
+                        }
+                        case Descriptor.PING -> {
+                            List<String> addresses = new ArrayList<>(List.of(this.routerSockIP));
+                            addresses.addAll(this.neigh.keySet());
+                            reply = new IdentifiedMessage(msg.getIdentity(), Descriptor.PONG, addresses).newZMsg();
                             reply.send(this.routerSock);
                         }
-                    }
-                    case Descriptor.PING -> {
-                        List<String> addresses = new ArrayList<>(List.of(this.routerSockIP));
-                        addresses.addAll(this.neigh.keySet());
-                        reply = new IdentifiedMessage(msg.getIdentity(), Descriptor.PONG, addresses).newZMsg();
-                        reply.send(this.routerSock);
+                        case Descriptor.QUERY -> {
+
+                        }
                     }
                 }
             }
-        }
-        return "";
+        });
     }
 
     private boolean handleDrop() {
@@ -176,15 +202,20 @@ public class GnuNode {
         if (this.neigh.size() < GnuNode.MAX_NEIGH)
             return true;
 
-        Map.Entry<String, Integer> maxEntry = null;
-        for (Map.Entry<String, Integer> entry : this.neigh.entrySet()) {
-            if (maxEntry == null || entry.getValue().compareTo(maxEntry.getValue()) > 0) {
+        Map.Entry<String, GnuNodeInfo> maxEntry = null;
+        for (Map.Entry<String, GnuNodeInfo> entry : this.neigh.entrySet()) {
+            if (maxEntry == null || (entry.getValue().nNeighbors > maxEntry.getValue().nNeighbors)) {
                 maxEntry = entry;
             }
         }
-        if (maxEntry.getValue() > Integer.parseInt(um.getArg(1)) + 1) {
+        if (maxEntry.getValue().nNeighbors > Integer.parseInt(um.getArg(1)) + 1) {
             ZMQ.Socket skt = this.zctx.createSocket(SocketType.REQ);
-            skt.connect(maxEntry.getKey());
+            try {
+                skt.connect(maxEntry.getKey());
+            } catch (Exception e) {
+                System.err.println("Failed to connect to endpoint!");
+                return false;
+            }
             ZMsg toSend = new UnidentifiedMessage("DROP", Collections.singletonList(this.routerSockIP)).newZMsg();
             toSend.send(skt);
             UnidentifiedMessage reply = new UnidentifiedMessage(ZMsg.recvMsg(skt));
@@ -202,10 +233,10 @@ public class GnuNode {
             this.neigh.remove(s);
         }
 
-        System.out.println("My Neighbors:");
-        for (Map.Entry<String, Integer> entry : this.neigh.entrySet()) {
-            System.out.println("\t- " + entry.getKey());
-        }
+//        System.out.println("My Neighbors:");
+//        for (Map.Entry<String, Integer> entry : this.neigh.entrySet()) {
+//            System.out.println("\t- " + entry.getKey());
+//        }
         List<String> pingArgs = List.of(this.id, "0", String.valueOf(Descriptor.PING_TTL), this.routerSockIP);
         Descriptor pingMsg = new Descriptor(Descriptor.PING, pingArgs);
 
@@ -219,16 +250,22 @@ public class GnuNode {
                     deadNeighbors.add(neighborAdd);
                     return;
                 }
-                sock.connect(neighborAdd);
+                try {
+                    sock.connect(neighborAdd);
+                } catch (Exception e) {
+                    System.err.println("Failed to connect to endpoint!");
+                }
                 pingMsg.newZMsg().send(sock);
 
                 UnidentifiedMessage reply = new UnidentifiedMessage(ZMsg.recvMsg(sock));
 
                 if (!reply.getCmd().equals("PONG")) return;
-                System.out.println("Received PONG cmd");
+//                System.out.println("Received PONG cmd");
 
                 Set<String> unknownAdds = new HashSet<>();
-                this.neigh.put(neighborAdd, reply.getArgCount() - 1);
+
+                this.neigh.get(neighborAdd).nNeighbors = reply.getArgCount() - 1;
+
                 for (int i = 0; i < reply.getArgCount(); ++i) {
                     String address = reply.getArg(i);
                     if (address.equals(this.routerSockIP))
