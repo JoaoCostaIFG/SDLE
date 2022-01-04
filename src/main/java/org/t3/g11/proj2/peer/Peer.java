@@ -1,5 +1,6 @@
 package org.t3.g11.proj2.peer;
 
+import org.t3.g11.proj2.TableFormatter;
 import org.t3.g11.proj2.keyserver.KeyServer;
 import org.t3.g11.proj2.keyserver.KeyServerCMD;
 import org.t3.g11.proj2.keyserver.KeyServerReply;
@@ -17,6 +18,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.spec.InvalidKeySpecException;
+import java.sql.Date;
 import java.sql.SQLException;
 import java.util.*;
 
@@ -107,7 +109,6 @@ public class Peer {
 
         try {
             this.peerData = new PeerData(username);
-            this.peerData.addUserSelf(KeyHolder.encodeKey(keyHolder.getPublicKey()));
         } catch (SQLException throwables) {
             throwables.printStackTrace();
             System.err.println("Failed to open user database.");
@@ -161,7 +162,30 @@ public class Peer {
         return true;
     }
 
+    private List<HashMap<String, String>> getSelfPeerPosts(){
+        try {
+            return peerData.getPostsSelf();
+        }catch (SQLException throwables) {
+            System.err.println(throwables.getMessage());
+            return null;
+        }
+    }
 
+    public void printPosts(List<HashMap<String, String>> posts){
+        if(posts == null) {
+            System.out.println("No Posts To Show");
+            return;
+        }
+
+        TableFormatter tf = new TableFormatter();
+        tf.printHeader();
+
+
+        for(HashMap<String, String> post : posts){
+            tf.printPostRow(post.get("author"), post.get("content"), post.get("timestamp"));
+        }
+
+    }
 
     private static boolean notAuthLoop(Peer peer) {
         Scanner sc = new Scanner(System.in);
@@ -181,7 +205,7 @@ public class Peer {
             switch (cmd) {
                 case 'r', 'R':
                     // TODO this username is random each time!!!!!!!
-                    byte[] buf = new byte[12];
+                    byte[] buf = new byte[2];
                     new Random().nextBytes(buf);
                     username = new String(Base64.getEncoder().encode(buf)).replaceAll("/", "");
                     if (!peer.register(username)) {
@@ -191,13 +215,15 @@ public class Peer {
                     }
                     return true;
                 case 'l', 'L':
+                    System.out.print("Insert username to login as: ");
                     username = sc.nextLine();
                     if (!peer.authenticate(username)) {
                         System.out.println("Login failed");
                     } else {
                         System.out.println("Logged in as " + username);
+                        return true;
                     }
-                    return true;
+                    break;
                 case 'q', 'Q':
                     return false;
                 default:
@@ -211,6 +237,7 @@ public class Peer {
         Scanner sc = new Scanner(System.in);
 
         while (true) {
+            peer.printPosts(peer.getSelfPeerPosts());
             System.out.print("""
                     n - New post
                     q - quit
