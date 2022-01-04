@@ -4,3 +4,5 @@
 .settings
 proj2.iml
 target
+*.db
+*.priv
