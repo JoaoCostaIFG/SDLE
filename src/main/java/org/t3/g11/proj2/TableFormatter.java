@@ -10,10 +10,10 @@ import java.text.SimpleDateFormat;
 public class TableFormatter {
     public void printHeader()
     {
-        for(int i=0; i<88;i++) System.out.print("_");
+        for(int i=0; i<90;i++) System.out.print("_");
         System.out.print("\n");
-        System.out.format("|%-15s|%-50s|%-19s|\n", "Username", "Content", "Publish Date");
-        for(int i=0; i<88;i++) System.out.print("=");
+        System.out.format("|%-17s|%-50s|%-19s|\n", "Username", "Content", "Publish Date");
+        for(int i=0; i<90;i++) System.out.print("=");
         System.out.print("\n");
     }
     public void printPostRow(String username, String content, String date){
@@ -28,10 +28,10 @@ public class TableFormatter {
                 DateFormat format = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
                 dt =  format.format(d);
             }
-            System.out.format("|%-15s|%-50s|%-19s|\n", usrname, s, dt);
+            System.out.format("|%-17s|%-50s|%-19s|\n", usrname, s, dt);
             firstLine=false;
         }
-        for(int i=0; i<88;i++) System.out.print("_");
+        for(int i=0; i<90;i++) System.out.print("_");
         System.out.print("\n");
     }
 }
