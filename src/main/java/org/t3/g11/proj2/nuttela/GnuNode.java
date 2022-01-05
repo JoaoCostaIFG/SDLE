@@ -16,9 +16,7 @@ public class GnuNode implements Runnable {
     public static final int RECEIVETIMEOUT = 5000;
     public static final int PING_FREQ = 5;
     public static final int MAX_NEIGH = 2;
-    public static final String CTRLADDR = "inproc://ctrl";
-    public static final int MAX_TTL = 4;
-    public static final int PING_TTL = 1;
+    public static final int HYSTERESIS_FACTOR = 1;
 
     private final Integer id;
 
