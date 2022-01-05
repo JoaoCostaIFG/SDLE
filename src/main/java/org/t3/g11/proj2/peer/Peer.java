@@ -107,7 +107,6 @@ public class Peer {
 
         try {
             this.peerData = new PeerData(username);
-            this.peerData.addUserSelf(KeyHolder.encodeKey(keyHolder.getPublicKey()));
         } catch (SQLException throwables) {
             throwables.printStackTrace();
             System.err.println("Failed to open user database.");
@@ -159,5 +158,14 @@ public class Peer {
             return false;
         }
         return true;
+    }
+
+    public List<HashMap<String, String>> getSelfPeerPosts() {
+        try {
+            return peerData.getPostsSelf();
+        }catch (SQLException throwables) {
+            System.err.println(throwables.getMessage());
+            return null;
+        }
     }
 }

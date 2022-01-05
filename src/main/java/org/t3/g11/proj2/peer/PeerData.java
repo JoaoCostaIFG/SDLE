@@ -1,6 +1,9 @@
 package org.t3.g11.proj2.peer;
 
 import java.sql.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 public class PeerData {
     private final Connection connection;
@@ -66,6 +69,43 @@ public class PeerData {
         pstmt.close();
 
         this.addPost(user_id, content, ciphered);
+    }
+
+    public List<HashMap<String, String>> getPosts(int user_id) throws SQLException {
+        PreparedStatement pstmt =
+                this.connection.prepareStatement("SELECT User.user_username, Post.post_date, Post.post_content " +
+                                                    "FROM (Post INNER JOIN User ON Post.user_id = User.user_id) " +
+                                                    "WHERE Post.user_id = ?");
+        pstmt.setInt(1, user_id);
+        ResultSet res = pstmt.executeQuery();
+
+
+        List<HashMap<String, String>> ret = new ArrayList<>();
+        while(res.next()){
+            HashMap<String, String> elem = new HashMap<>();
+            elem.put("author", res.getString("user_username"));
+            elem.put("timestamp", res.getString("post_date"));
+            elem.put("content", res.getString("post_content"));
+            ret.add(elem);
+        }
+
+        pstmt.close();
+        return ret;
+    }
+
+    public List<HashMap<String, String>> getPosts(String user_username) throws SQLException {
+        PreparedStatement pstmt = this.connection.prepareStatement("SELECT user_id FROM User WHERE user_username = ?");
+        pstmt.setString(1, user_username);
+        ResultSet res = pstmt.executeQuery();
+        if (!res.next()) throw new SQLException("User " + user_username + " not found");
+        int user_id = res.getInt("user_id");
+        pstmt.close();
+
+        return this.getPosts(user_id);
+    }
+
+    public List<HashMap<String, String>> getPostsSelf() throws SQLException {
+       return this.getPosts(this.username);
     }
 
     public void addPostSelf(String content, String ciphered) throws SQLException {
