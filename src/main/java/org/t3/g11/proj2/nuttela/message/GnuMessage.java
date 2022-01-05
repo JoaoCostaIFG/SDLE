@@ -2,9 +2,10 @@ package org.t3.g11.proj2.nuttela.message;
 
 import org.t3.g11.proj2.nuttela.GnuNodeCMD;
 
+import java.io.Serializable;
 import java.net.InetSocketAddress;
 
-public class GnuMessage {
+public class GnuMessage implements Serializable {
     protected final GnuNodeCMD cmd;
     protected final InetSocketAddress addr;
 

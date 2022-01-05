@@ -8,8 +8,6 @@ public enum GnuNodeCMD {
     NEIGH, // id, address, n_neigh, capacity
     NUMNEIGH,
     MYNEIGH, // n_neigh
-    NEIGHOK, // id, capacity
-    NEIGHERR,
     DROPOK,
     DROPERR,
     DROP, // id, address

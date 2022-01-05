@@ -8,7 +8,7 @@ public class NumNeighMessage extends GnuMessage {
     private int n_neighbors;
 
     public NumNeighMessage(InetSocketAddress addr, int n_neighbors) {
-        super(GnuNodeCMD.NEIGH, addr);
+        super(GnuNodeCMD.NUMNEIGH, addr);
         this.n_neighbors = n_neighbors;
     }
 
