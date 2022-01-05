@@ -2,6 +2,7 @@ package org.t3.g11.proj2.peer;
 
 import org.t3.g11.proj2.peer.ui.PeerInterface;
 import org.t3.g11.proj2.peer.ui.cmd.CmdInterface;
+import org.t3.g11.proj2.peer.ui.swing.SwingInterface;
 import org.zeromq.ZContext;
 
 import java.util.Arrays;
@@ -31,13 +32,13 @@ public class Main {
             return;
         }
 
-        if (Arrays.asList(args).contains("--gui")) {
-            System.err.println("Not implemented");
-            System.exit(1);
+        if (!Arrays.asList(args).contains("--gui")) {
+            main.setInterface(new SwingInterface(main.peer));
         } else {
             main.setInterface(new CmdInterface(main.peer));
         }
 
+        main.peerInterface.setup();
         main.peerInterface.clientLoop();
     }
 }
