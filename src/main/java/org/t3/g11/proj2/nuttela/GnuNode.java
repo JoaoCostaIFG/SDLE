@@ -50,7 +50,7 @@ public class GnuNode implements Runnable {
 
     private void bootstrap() {
         if (this.id == 1) return;
-        this.pickNeighborToDrop("tcp://*:8080");
+        this.pickNeighborToDrop("tcp://*:8081");
     }
 
     public boolean pickNeighborToDrop(String newNeighAddr) {

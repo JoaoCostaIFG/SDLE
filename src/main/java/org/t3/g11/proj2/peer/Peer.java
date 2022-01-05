@@ -13,20 +13,21 @@ import org.zeromq.ZMsg;
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.security.*;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.spec.InvalidKeySpecException;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Random;
-import java.util.Scanner;
+import java.sql.SQLException;
+import java.util.*;
 
 public class Peer {
     private final ZContext zctx;
     private final ZMQ.Socket ksSocket;
 
+    private PeerData peerData;
+
     private boolean authenticated;
-    private String username;
     private final KeyHolder keyHolder;
     private final GnuNode node;
     private final Thread nodeT;
@@ -40,7 +41,7 @@ public class Peer {
         }
 
         this.authenticated = false;
-        this.keyHolder = new KeyHolder(KeyServer.KEYINSTANCE);
+        this.keyHolder = new KeyHolder(KeyServer.KEYINSTANCE, KeyServer.KEYSIZE);
 
         this.node = node;
         this.nodeT = new Thread(this.node);
@@ -52,19 +53,15 @@ public class Peer {
 
     public boolean register(String username) {
         // keys stuff
-        KeyPair keyPair;
         try {
-            SecureRandom secureRandom = SecureRandom.getInstanceStrong();
-            KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(KeyServer.KEYINSTANCE);
-            keyPairGenerator.initialize(KeyServer.KEYSIZE, secureRandom);
-            keyPair = keyPairGenerator.generateKeyPair();
+            this.keyHolder.generateKeyPair();
         } catch (NoSuchAlgorithmException e) {
             System.err.println("Failed to initialize key generator.");
             return false;
         }
 
-        PublicKey publicKey = keyPair.getPublic();
-        PrivateKey privateKey = keyPair.getPrivate();
+        PublicKey publicKey = this.keyHolder.getPublicKey();
+        PrivateKey privateKey = this.keyHolder.getPrivateKey();
 
         ZMsg zMsg = new UnidentifiedMessage(
                 KeyServerCMD.REGISTER.toString(),
@@ -76,24 +73,62 @@ public class Peer {
         UnidentifiedMessage replyMsg = new UnidentifiedMessage(replyZMsg);
         if (replyMsg.getCmd().equals(KeyServerReply.SUCCESS.toString())) {
             // success
-            this.username = username;
-            this.keyHolder.setPrivateKey(privateKey);
-            this.keyHolder.setPublicKey(publicKey);
             try {
                 KeyHolder.writeKeyToFile(privateKey, username);
             } catch (IOException e) {
                 System.err.printf("Failed to save user's private key to a file. Here it is:\n%s\n",
-                        KeyHolder.encodeKey(privateKey));
+                    KeyHolder.encodeKey(privateKey));
             }
+
+            try {
+                KeyHolder.writeKeyToFile(publicKey, username);
+            } catch (IOException e) {
+                System.err.printf("Failed to save user's public key to a file. Here it is:\n%s\n",
+                        KeyHolder.encodeKey(publicKey));
+            }
+
+            try {
+                this.peerData = new PeerData(username);
+                this.peerData.reInitDB();
+                this.peerData.addUserSelf(KeyHolder.encodeKey(publicKey));
+            } catch (SQLException throwables) {
+                throwables.printStackTrace();
+                System.err.println("Failed to create database.");
+                System.exit(1);
+            }
+            this.startNode();
             this.authenticated = true;
         } else {
             // failure
             this.authenticated = false;
             this.keyHolder.clear();
-            this.username = null;
         }
 
         return this.authenticated;
+    }
+
+    public boolean authenticate(String username) {
+        this.authenticated = false;
+
+        try {
+            this.keyHolder.importKeysFromFile(username);
+        } catch (IOException | InvalidKeySpecException e) {
+            e.printStackTrace();
+            return false;
+        }
+
+        try {
+            this.peerData = new PeerData(username);
+        } catch (SQLException throwables) {
+            throwables.printStackTrace();
+            System.err.println("Failed to open user database.");
+            this.keyHolder.clear();
+            return false;
+        }
+
+        this.startNode();
+        this.authenticated = true;
+        return true;
     }
 
     public PublicKey lookup(String username) {
@@ -119,105 +154,35 @@ public class Peer {
         }
     }
 
-    public void testEncryption() {
-        byte[] buffer = "Padoru".getBytes(StandardCharsets.UTF_8);
+    public boolean newPost(String content) {
+        byte[] cipherBuffer = content.getBytes();
+        String ciphered;
         try {
-            byte[] encrypted = this.keyHolder.encrypt(buffer);
-            System.out.println(new String(this.keyHolder.decrypt(encrypted)));
+            ciphered = this.keyHolder.encryptStr(cipherBuffer);
         } catch (InvalidKeyException | IllegalBlockSizeException | BadPaddingException e) {
-            e.printStackTrace();
-        }
-    }
-
-    public void post(String msg) {
-        this.node.send(msg, "0");
-    }
-
-    public static void main(String[] args) {
-        if (args.length < 2) {
-            System.out.println("Usage: Peer <id> <routerAdd>");
-            return;
+            System.err.println("Failed to encrypt post content.");
+            return false;
         }
 
-        // TODO hash username
-        ZContext zctx = new ZContext();
-        GnuNode node = new GnuNode(zctx, Integer.parseInt(args[0]), args[1]);
-        Peer peer;
         try {
-            peer = new Peer(zctx, node);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return;
+            this.peerData.addPostSelf(content, ciphered);
+        } catch (SQLException throwables) {
+            System.err.println(throwables.getMessage());
+            return false;
         }
+        return true;
+    }
 
-        Scanner sc = new Scanner(System.in);
-        event_loop:
-        while (true) {
-            if (!peer.authenticated) {
-                System.out.print("""
-                        r - Register
-                        l - Login
-                        q - quit
-                        """);
-                System.out.flush();
-                String nextLine = sc.nextLine();
-                if (nextLine.length() <= 0) continue;
-                char cmd = nextLine.charAt(0);
-
-                switch (cmd) {
-                    case 'r', 'R':
-                        // TODO this username is random each time!!!!!!!
-                        byte[] buf = new byte[12];
-                        new Random().nextBytes(buf);
-                        String username = new String(buf, StandardCharsets.UTF_8);
-                        if (!peer.register(username)) {
-                            System.out.println("Register failed");
-                        } else {
-                            System.out.println("Authenticated as " + username);
-                        }
-                        break;
-                    case 'l', 'L':
-                        // for testing
-                        peer.startNode();
-                        peer.authenticated = true;
-                        break;
-                    case 'q', 'Q':
-                        System.err.println("Quitting...");
-                        break event_loop;
-                    default:
-                        System.err.println("Unknown command...");
-                        continue event_loop;
-                }
-            } else {
-                System.out.print("""
-                        n - New post
-                        q - quit
-                        """);
-                System.out.flush();
-                String nextLine = sc.nextLine();
-                if (nextLine.length() <= 0) continue;
-                char cmd = nextLine.charAt(0);
-
-                switch (cmd) {
-                    case 'n', 'N':
-                        System.out.print("Insert post:");
-                        System.out.flush();
-                        //peer.testEncryption();
-                        String postMsg = sc.nextLine();
-                        if (postMsg.length() <= 0) continue;
-
-                        peer.post(postMsg);
-                        break;
-                    case 'q', 'Q':
-                        System.err.println("Quitting...");
-                        // TODO
-                        peer.nodeT.interrupt();
-                        break event_loop;
-                    default:
-                        System.err.println("Unknown command...");
-                        continue event_loop;
-                }
-            }
+    public List<HashMap<String, String>> getSelfPeerPosts() {
+        try {
+            return peerData.getPostsSelf();
+        }catch (SQLException throwables) {
+            System.err.println(throwables.getMessage());
+            return null;
         }
     }
+
+    public void shutdown() {
+    }
+
 }
