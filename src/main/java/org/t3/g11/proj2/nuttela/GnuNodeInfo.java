@@ -1,12 +1,14 @@
 package org.t3.g11.proj2.nuttela;
 
+import java.net.InetSocketAddress;
+
 public class GnuNodeInfo {
     public int nNeighbors;
     public int capacity;
-    public String address;
+    public InetSocketAddress address;
     public int state; // 0 - dead; 1 - alive; 2 - determining;
 
-    public GnuNodeInfo(int nNeighbors, int capacity, String address) {
+    public GnuNodeInfo(int nNeighbors, int capacity, InetSocketAddress address) {
         this.nNeighbors = nNeighbors;
         this.capacity = capacity;
         this.state = 1;

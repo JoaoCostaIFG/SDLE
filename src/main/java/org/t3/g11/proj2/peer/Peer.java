@@ -3,7 +3,7 @@ package org.t3.g11.proj2.peer;
 import org.t3.g11.proj2.keyserver.KeyServer;
 import org.t3.g11.proj2.keyserver.KeyServerCMD;
 import org.t3.g11.proj2.keyserver.KeyServerReply;
-import org.t3.g11.proj2.message.UnidentifiedMessage;
+import org.t3.g11.proj2.keyserver.message.UnidentifiedMessage;
 import org.t3.g11.proj2.nuttela.GnuNode;
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;

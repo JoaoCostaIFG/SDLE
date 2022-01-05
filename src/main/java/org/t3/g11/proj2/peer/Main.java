@@ -11,15 +11,15 @@ public class Main {
 
     public static void main(String[] args) {
 
-        if (args.length < 2) {
-            System.out.println("Usage: Peer <id> <routerAdd>");
+        if (args.length < 3) {
+            System.out.println("Usage: Peer <id> <routerIP> <routerPort>");
             return;
         }
 
         ZContext zctx = new ZContext();
         Peer peer;
         try {
-            peer = new Peer(zctx, new GnuNode(zctx, Integer.parseInt(args[0]), args[1]));
+            peer = new Peer(zctx, new GnuNode(Integer.parseInt(args[0]), args[1], Integer.parseInt(args[2])));
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);

@@ -1,7 +1,7 @@
 package org.t3.g11.proj2.keyserver;
 
-import org.t3.g11.proj2.message.IdentifiedMessage;
-import org.t3.g11.proj2.message.UnidentifiedMessage;
+import org.t3.g11.proj2.keyserver.message.IdentifiedMessage;
+import org.t3.g11.proj2.keyserver.message.UnidentifiedMessage;
 import org.zeromq.ZMsg;
 
 public enum KeyServerReply {

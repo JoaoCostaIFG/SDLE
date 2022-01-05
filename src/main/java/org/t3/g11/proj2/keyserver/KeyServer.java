@@ -16,7 +16,6 @@ public class KeyServer {
     public static final String ENDPOINT = "tcp://localhost:8080";
     public static final String KEYINSTANCE = "RSA";
     public static final int KEYSIZE = 4096;
-
     private static final String workersPushEndpoint = "inproc://workersPush";
     private static final String workersPullEndpoint = "inproc://workersPull";
     private static final String DBRESOURCE = "keyserver.db";

@@ -1,6 +1,6 @@
 package org.t3.g11.proj2.keyserver;
 
-import org.t3.g11.proj2.message.IdentifiedMessage;
+import org.t3.g11.proj2.keyserver.message.IdentifiedMessage;
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ.Socket;
