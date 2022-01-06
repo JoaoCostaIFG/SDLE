@@ -10,7 +10,6 @@ import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -144,6 +143,9 @@ public class GnuNode implements Runnable {
                 try (Socket sendSkt = new Socket(neighbour.getValue().address.getAddress(), neighbour.getValue().address.getPort())) {
                     ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
                     oss.writeObject(qm);
+                    // wait for ack
+                    ObjectInputStream iss = new ObjectInputStream(sendSkt.getInputStream());
+                    iss.readObject();
                 } catch (Exception e) {
                     System.out.println("Couldn't connect to neighbor " + neighbour.getKey());
                 }
@@ -261,7 +263,7 @@ public class GnuNode implements Runnable {
             case NUMNEIGH -> this.handleNumNeigh(ois, oos, (NumNeighMessage) reqMsg);
             case NEIGH -> this.handleNeigh((NeighMessage) reqMsg);
             case DROP -> this.handleDrop(oos, (DropMessage) reqMsg);
-            case QUERY -> this.handleQuery((QueryMessage) reqMsg);
+            case QUERY -> this.handleQuery(oos, (QueryMessage) reqMsg);
             case QUERYHIT -> this.handleQueryHit((QueryHitMessage) reqMsg);
         }
 
@@ -272,7 +274,16 @@ public class GnuNode implements Runnable {
         }
     }
 
-    private void handleQuery(QueryMessage reqMsg) {
+    private void handleQuery(ObjectOutputStream oos, QueryMessage reqMsg) {
+
+        try {
+            GnuMessage ackMsg = GnuNodeCMD.ACK.getMessage(this.addr);
+            oos.writeObject(ackMsg);
+        } catch (Exception e) {
+            System.err.println("Couldn't connect to query relayer peer");
+            e.printStackTrace();
+        }
+
         // TODO this is only searching by ID
         if (reqMsg.getQuery().getQueryString().equals(this.peer.getPeerData().getUsername())) {
             try (Socket sendSkt = new Socket(reqMsg.getAddr().getAddress(), reqMsg.getAddr().getPort())) {
@@ -287,7 +298,7 @@ public class GnuNode implements Runnable {
                 QueryHitMessage qhm = new QueryHitMessage(this.addr, reqMsg.getGuid(), results);
                 oss.writeObject(qhm);
             } catch (Exception e) {
-                System.err.println("Couldn't connect to initiator peer, with exception:");
+                System.err.println("Couldn't connect to initiator peer");
                 e.printStackTrace();
             }
         } else {
