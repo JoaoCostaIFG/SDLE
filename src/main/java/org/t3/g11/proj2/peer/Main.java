@@ -10,7 +10,6 @@ import java.util.Arrays;
 public class Main {
 
     public static void main(String[] args) {
-
         if (args.length < 3) {
             System.out.println("Usage: Peer <id> <routerIP> <routerPort>");
             return;

@@ -1,6 +1,7 @@
 package org.t3.g11.proj2.nuttela;
 
 import org.t3.g11.proj2.nuttela.message.*;
+import org.t3.g11.proj2.peer.Peer;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -9,6 +10,9 @@ import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.ByteBuffer;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -20,7 +24,7 @@ public class GnuNode implements Runnable {
 
     private final Integer id;
 
-    private final ConcurrentHashMap<String, List<Integer>> messagesSent;
+    private final ConcurrentHashMap<Integer, List<Integer>> sentTo;
     private final ConcurrentHashMap<Integer, GnuNodeInfo> neighbors;
     private final CopyOnWriteArraySet<InetSocketAddress> hostsCache;
 
@@ -30,11 +34,12 @@ public class GnuNode implements Runnable {
     private final ExecutorService timeouts;
     private final ServerSocket serverSocket;
 
-    public GnuNode(Integer id, String address, int port) throws IOException {
+    public GnuNode(int id, String address, int port) throws IOException {
+        this.peer = peer;
         this.id = id; // TODO hash username
 
         this.neighbors = new ConcurrentHashMap<>();
-        this.messagesSent = new ConcurrentHashMap<>();
+        this.sentTo = new ConcurrentHashMap<>();
         this.hostsCache = new CopyOnWriteArraySet<>();
 
         int max_reqs = Runtime.getRuntime().availableProcessors() + 1;
@@ -44,6 +49,18 @@ public class GnuNode implements Runnable {
 
         this.addr = new InetSocketAddress(address, port);
         this.serverSocket = new ServerSocket(this.addr.getPort(), 100, this.addr.getAddress());
+    }
+
+    public static int IdFromName(String name) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(name.getBytes());
+            ByteBuffer wrapped = ByteBuffer.wrap(hash);
+            return wrapped.getInt();
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+            return -1;
+        }
     }
 
     private void bootstrap() {
@@ -106,42 +123,31 @@ public class GnuNode implements Runnable {
         return false;
     }
 
-    public void send(String guid, String toSend, String currentHop) {
-//        if (!this.messagesSent.containsKey(guid))
-//            this.messagesSent.put(guid, new ArrayList<>());
-//        int nTries = 0;
-//
-//        while (nTries < 5) {
-//            for (Map.Entry<Integer, GnuNodeInfo> neighbour :
-//                    this.neighbors.entrySet().stream()
-//                            .sorted(Map.Entry.comparingByValue(Comparator.comparingInt(n -> n.capacity))).toList()) {
-//
-//                if (this.messagesSent.get(guid).contains(neighbour.getKey())) continue;
-//                this.messagesSent.get(guid).add(neighbour.getKey());
-//
-//                // TODO it would be nice to have more checks here
-//                if (neighbour.getValue().state == 0) continue;
-//                ZMsg msg = GnuNodeCMD.QUERY.getMessage(
-//                        Arrays.asList(String.valueOf(this.id), currentHop, String.valueOf(GnuNode.MAX_TTL), toSend));
-//                try {
-//                    ZMQ.Socket skt = this.zctx.createSocket(SocketType.REQ);
-//                    skt.connect(neighbour.getValue().address);
-//                    msg.send(skt);
-//                    ZMsg msgReply = ZMsg.recvMsg(skt);
-//                    UnidentifiedMessage reply = new UnidentifiedMessage(msgReply);
-//                    if (reply.getCmd().equals("QUERYHIT")) {
-//
-//                        return;
-//                    }
-//                } catch (Exception e) {
-//                    System.err.println("Failed to communicate with endpoint!");
-//                    continue;
-//                }
-//                break;
-//            }
-//            nTries++;
-//            this.messagesSent.get(guid).clear();
-//        }
+    public void send(QueryMessage qm) {
+        if (!this.sentTo.containsKey(qm.getGuid()))
+            this.sentTo.put(qm.getGuid(), new ArrayList<>());
+        int nTries = 0;
+
+        // TODO incremental sleep retries
+        while (nTries < 5) {
+            for (Map.Entry<Integer, GnuNodeInfo> neighbour : this.neighbors.entrySet().stream()
+                    .sorted(Map.Entry.comparingByValue(Comparator.comparingInt(n -> n.capacity))).toList()) {
+
+                if (this.sentTo.get(qm.getGuid()).contains(neighbour.getKey())) continue;
+                this.sentTo.get(qm.getGuid()).add(neighbour.getKey());
+
+                // TODO it would be nice to have more checks here
+                if (neighbour.getValue().state == 0) continue;
+                try (Socket sendSkt = new Socket(neighbour.getValue().address.getAddress(), neighbour.getValue().address.getPort())) {
+                    ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
+                    oss.writeObject(qm);
+                } catch (Exception e) {
+                    System.out.println("Couldn't connect to neighbor " + neighbour.getKey());
+                }
+            }
+            nTries++;
+            this.sentTo.get(qm.getGuid()).clear();
+        }
     }
 
 
@@ -153,7 +159,6 @@ public class GnuNode implements Runnable {
             System.out.println("\t" + neigh.getKey() + " - " + neigh.getValue().state);
         }
 
-        ping_loop:
         for (Map.Entry<Integer, GnuNodeInfo> e : this.neighbors.entrySet()) {
             GnuNodeInfo peerNode = e.getValue();
             if (peerNode.state == 1)
@@ -176,7 +181,7 @@ public class GnuNode implements Runnable {
             } catch (ClassNotFoundException | IOException exception) {
                 System.out.println("Failed to connect to " + e.getKey());
                 peerNode.setDead();
-                continue ping_loop;
+                continue;
             }
 
             // process the reply
@@ -219,7 +224,6 @@ public class GnuNode implements Runnable {
             } catch (IOException e) {
                 System.err.println("Receiving failed with exception:");
                 e.printStackTrace();
-                continue;
             }
         }
 
@@ -242,12 +246,39 @@ public class GnuNode implements Runnable {
             case NUMNEIGH -> this.handleNumNeigh(ois, oos, (NumNeighMessage) reqMsg);
             case NEIGH -> this.handleNeigh((NeighMessage) reqMsg);
             case DROP -> this.handleDrop(oos, (DropMessage) reqMsg);
+            case QUERY -> this.handleQuery((QueryMessage) reqMsg);
+            case QUERYHIT -> this.handleQueryHit((QueryHitMessage) reqMsg);
         }
 
         try {
             oos.close();
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    private void handleQuery(QueryMessage reqMsg) {
+        // TODO this is only searching by ID
+        if (reqMsg.getQuery().getQueryString().equals(String.valueOf(this.id))) {
+            try (Socket sendSkt = new Socket(reqMsg.getAddr().getAddress(), reqMsg.getAddr().getPort())) {
+                ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
+                QueryHitMessage qhm = new QueryHitMessage(this.addr, reqMsg.getGuid(), Collections.singletonList(String.valueOf(this.id)));
+                oss.writeObject(qhm);
+            } catch (Exception e) {
+                System.err.println("Couldn't connect to initiator peer, with exception:");
+                e.printStackTrace();
+            }
+        } else {
+            if (reqMsg.decreaseTtl() != 0)
+                send(reqMsg);
+        }
+    }
+
+    private void handleQueryHit(QueryHitMessage reqMsg) {
+        List<Result> hitPosts = reqMsg.getResultSet();
+        System.out.println("Query hit from " + reqMsg.getAddr());
+        for(Result post : hitPosts) {
+            System.out.println(post.ciphered);
         }
     }
 
