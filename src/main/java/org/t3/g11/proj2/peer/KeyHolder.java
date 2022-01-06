@@ -87,7 +87,7 @@ public class KeyHolder {
     }
 
     public String decryptStr(String ciphered, PublicKey publicKey) throws InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
-        byte[] buf = Base64.getDecoder().decode(ciphered.getBytes());
+        byte[] buf = Base64.getDecoder().decode(ciphered);
         return new String(this.decrypt(buf, publicKey));
     }
 

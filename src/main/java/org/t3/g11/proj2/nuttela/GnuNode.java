@@ -13,6 +13,7 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -93,7 +94,6 @@ public class GnuNode implements Runnable {
                         Comparator.comparingInt(e -> (e.getValue()).nNeighbors)).getKey();
                 GnuNodeInfo toDrop = this.neighbors.get(highestNeigh);
                 if (toDrop.nNeighbors > reply.getNeighbors() + 1) {
-                    System.out.println("SENDING DROOOOOOOOOP to " + toDrop.address);
                     Socket dropSocket = new Socket(toDrop.address.getAddress(), toDrop.address.getPort());
                     ObjectOutputStream dropOos = new ObjectOutputStream(dropSocket.getOutputStream());
                     DropMessage dm = new DropMessage(this.addr, this.id);
@@ -146,8 +146,9 @@ public class GnuNode implements Runnable {
                     // wait for ack
                     ObjectInputStream iss = new ObjectInputStream(sendSkt.getInputStream());
                     iss.readObject();
+                    return;
                 } catch (Exception e) {
-                    System.out.println("Couldn't connect to neighbor " + neighbour.getKey());
+                    System.err.println("Couldn't connect to neighbor " + neighbour.getKey());
                 }
             }
             nTries++;
@@ -160,7 +161,7 @@ public class GnuNode implements Runnable {
             try {
                 this.query(new QueryMessage(this.addr, this.id, new Query(sub)));
             } catch (Exception e) {
-                System.out.println("Problem getting info about user: " + sub);
+                System.err.println("Problem getting info about user: " + sub);
             }
         }
     }
@@ -187,19 +188,17 @@ public class GnuNode implements Runnable {
                 sockPing.setSoTimeout(GnuNode.RECEIVETIMEOUT);
                 ObjectOutputStream oss = new ObjectOutputStream(sockPing.getOutputStream());
                 oss.writeObject(pingMsg);
-                System.out.println("SENT PING");
                 // try to receive the reply
                 InputStream is = sockPing.getInputStream();
                 ObjectInputStream iss = new ObjectInputStream(is);
                 reply = (PongMessage) iss.readObject();
             } catch (ClassNotFoundException | IOException exception) {
-                System.out.println("Failed to connect to " + e.getKey());
+                System.err.println("Failed to connect to " + e.getKey());
                 peerNode.setDead();
                 continue;
             }
 
             // process the reply
-            System.out.println("RECEIVED PONG CMD");
             peerNode.setAlive(); // peer is good
             // update the hosts cache
             peerNode.nNeighbors = reply.getNeighAddrs().size();
@@ -256,7 +255,7 @@ public class GnuNode implements Runnable {
             e.printStackTrace();
             return;
         }
-        System.out.println("RECEIVED " + reqMsg.getCmd() + " CMD");
+        //System.out.println("RECEIVED " + reqMsg.getCmd() + " CMD");
 
         switch (reqMsg.getCmd()) {
             case PING -> this.handlePing(oos, reqMsg);
@@ -275,17 +274,17 @@ public class GnuNode implements Runnable {
     }
 
     private void handleQuery(ObjectOutputStream oos, QueryMessage reqMsg) {
-
         try {
             GnuMessage ackMsg = GnuNodeCMD.ACK.getMessage(this.addr);
             oos.writeObject(ackMsg);
         } catch (Exception e) {
             System.err.println("Couldn't connect to query relayer peer");
             e.printStackTrace();
+            return;
         }
 
         // TODO this is only searching by ID
-        if (reqMsg.getQuery().getQueryString().equals(this.peer.getPeerData().getUsername())) {
+        if (reqMsg.getQuery().getQueryString().equals(this.peer.getPeerData().getSelfUsername())) {
             try (Socket sendSkt = new Socket(reqMsg.getAddr().getAddress(), reqMsg.getAddr().getPort())) {
                 ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
 
@@ -309,14 +308,23 @@ public class GnuNode implements Runnable {
 
     private void handleQueryHit(QueryHitMessage reqMsg) {
         List<Result> hitPosts = reqMsg.getResultSet();
-        System.out.println("Query hit from " + reqMsg.getAddr());
         for (Result post : hitPosts) {
+            String content;
             try {
-                String decipheredText = peer.decypherText(post.ciphered, post.author);
-                System.out.println(decipheredText);
+                content = peer.decypherText(post.ciphered, post.author);
             } catch (Exception e) {
-                System.out.println("Got a post from someone that does not exist (does not have keys)");
+                System.err.println("Got a post from someone that does not exist (does not have keys)");
+                e.printStackTrace();
+                continue;
             }
+
+            try {
+                peer.getPeerData().addPost(post.author, content, post.ciphered);
+            } catch (SQLException throwables) {
+                System.err.println(":C");
+                throwables.printStackTrace();
+            }
+
         }
     }
 
@@ -419,10 +427,7 @@ public class GnuNode implements Runnable {
             if (this.neighbors.size() != 1) {
                 reply = GnuNodeCMD.DROPOK.getMessage(this.addr);
                 oos.writeObject(reply);
-
-                System.out.println("REMOVING " + reqMsg.getId());
                 this.neighbors.remove(reqMsg.getId());
-
             } else {
                 reply = GnuNodeCMD.DROPERR.getMessage(this.addr);
                 oos.writeObject(reply);

@@ -22,8 +22,9 @@ public class AuthenticatedPage implements CmdPage {
 
         System.out.print("""
                 n - New post
-                s - List stored posts
+                p - List stored posts
                 f - Follow someone
+                u - Unfollow someone
                 l - Lookup content
                 q - quit
                 """);
@@ -42,18 +43,22 @@ public class AuthenticatedPage implements CmdPage {
                 else
                     System.out.println("Post created.");
             }
-            case 's', 'S' -> {
-                List<HashMap<String, String>> selfPosts = peer.getSelfPeerPosts();
-                if (selfPosts == null || selfPosts.isEmpty()) {
-                    System.out.println("No Posts To Show");
-                    return;
-                }
+            case 'p', 'P' -> {
+                try {
+                    List<HashMap<String, String>> posts = peer.getPosts();
+                    if (posts == null || posts.isEmpty()) {
+                        System.out.println("No Posts To Show");
+                        return;
+                    }
 
-                TableFormatter tf = new TableFormatter();
-                tf.printHeader();
+                    TableFormatter tf = new TableFormatter();
+                    tf.printHeader();
 
-                for (HashMap<String, String> post : selfPosts) {
-                    tf.printPostRow(post.get("author"), post.get("content"), post.get("timestamp"));
+                    for (HashMap<String, String> post : posts) {
+                        tf.printPostRow(post.get("author"), post.get("content"), post.get("timestamp"));
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error loading posts");
                 }
             }
             case 'f', 'F' -> {
@@ -61,10 +66,22 @@ public class AuthenticatedPage implements CmdPage {
                 System.out.flush();
                 String content = sc.nextLine();
 
-                if (!peer.subscribe(content))
-                    System.out.println("Already subscribed.");
-                else
-                    System.out.println("Subscribed successfully.");
+                try {
+                    peer.subscribe(content);
+                } catch (Exception e) {
+                    System.out.println(e.getMessage());
+                }
+            }
+            case 'u', 'U' -> {
+                System.out.print("User to unfollow: ");
+                System.out.flush();
+                String content = sc.nextLine();
+
+                try {
+                    peer.unsubscribe(content);
+                } catch (Exception e) {
+                    System.out.println(e.getMessage());
+                }
             }
             case 'l', 'L' -> {
                 System.out.print("User to show: ");

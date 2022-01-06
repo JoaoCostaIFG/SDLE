@@ -20,7 +20,6 @@ import java.security.PublicKey;
 import java.security.spec.InvalidKeySpecException;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArraySet;
 
 public class Peer {
     private final ZContext zctx;
@@ -29,14 +28,12 @@ public class Peer {
     private PeerData peerData;
 
     private boolean authenticated;
-    private CopyOnWriteArraySet<String> subs;
     private final KeyHolder keyHolder;
     private final GnuNode node;
     private final Thread nodeT;
 
     public Peer(ZContext zctx, int id, String address, int port) throws Exception {
         this.zctx = zctx;
-        this.subs = new CopyOnWriteArraySet<>();
         this.ksSocket = zctx.createSocket(SocketType.REQ);
         if (!this.ksSocket.connect(KeyServer.ENDPOINT)) {
             System.err.println("Failed to connect to keyserver.");
@@ -169,6 +166,9 @@ public class Peer {
         }
 
         try {
+//            System.out.println(ciphered);
+//            System.out.println(ciphered.length());
+//            System.out.println(Arrays.toString(ciphered.getBytes()));
             this.peerData.addPostSelf(content, ciphered);
         } catch (SQLException throwables) {
             System.err.println(throwables.getMessage());
@@ -213,21 +213,29 @@ public class Peer {
     public String decypherText(String ciphered, String username) throws Exception {
         PublicKey publicKey = this.getUserKey(username);
         if (publicKey == null) throw new Exception("User " + username + " not found.");
-
-        return new String(
-                this.keyHolder.decrypt(
-                        Base64.getDecoder().decode(ciphered.getBytes()),
-                        publicKey
-                )
-        );
+        return this.keyHolder.decryptStr(ciphered, publicKey);
     }
 
-    public boolean subscribe(String username) {
-        return this.subs.add(username);
+    public void subscribe(String username) throws Exception {
+        if (this.peerData.getSelfUsername().equals(username)) throw new Exception("Can't subscribe to self.");
+
+        PublicKey publicKey = this.lookup(username);
+        if (publicKey == null) throw new Exception("User " + username + " not found.");
+        this.peerData.addUser(username, KeyHolder.encodeKey(publicKey));
+    }
+
+    public void unsubscribe(String username) throws Exception {
+        if (this.peerData.getSelfUsername().equals(username)) throw new Exception("Can't subscribe to self.");
+        this.peerData.removeUser(username);
     }
 
     public Set<String> getSubs() {
-        return this.subs;
+        try {
+            return this.peerData.getSubs();
+        } catch (Exception e) {
+            System.out.println("There was a problem getting subscribed users");
+            return new HashSet<>();
+        }
     }
 
     public List<HashMap<String, String>> getUserPosts(String username) {
@@ -244,5 +252,13 @@ public class Peer {
     }
 
     public void shutdown() {
+    }
+
+    public List<HashMap<String, String>> getPosts() throws Exception {
+        List<HashMap<String, String>> posts = new ArrayList<>();
+        for(String usrnm : this.peerData.getSubs())
+            posts.addAll(this.getUserPosts(usrnm));
+        posts.addAll(this.getSelfPeerPosts());
+        return posts;
     }
 }

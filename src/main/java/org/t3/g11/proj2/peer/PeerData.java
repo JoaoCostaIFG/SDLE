@@ -1,9 +1,7 @@
 package org.t3.g11.proj2.peer;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 public class PeerData {
     private final Connection connection;
@@ -14,7 +12,7 @@ public class PeerData {
         this.connection = DriverManager.getConnection("jdbc:sqlite:" + username + ".db");
     }
 
-    public String getUsername() {
+    public String getSelfUsername() {
         return this.username;
     }
 
@@ -51,18 +49,28 @@ public class PeerData {
         pstmt.close();
     }
 
+    public void removeUser(String username) throws SQLException {
+        PreparedStatement pstmt = this.connection.prepareStatement("DELETE FROM User WHERE user_username = ?");
+        pstmt.setString(1, username);
+        pstmt.executeUpdate();
+        pstmt.close();
+    }
+
     public void addUserSelf(String pubkey) throws SQLException {
         this.addUser(this.username, pubkey);
     }
 
     public void addPost(int user_id, String content, String ciphered) throws SQLException {
         PreparedStatement pstmt = this.connection.prepareStatement("INSERT INTO Post(post_content, post_ciphered, user_id) VALUES(?, ?, ?)");
+        System.out.println("Content: " + content);
         pstmt.setString(1, content);
         pstmt.setString(2, ciphered);
         pstmt.setInt(3, user_id);
         pstmt.executeUpdate();
         pstmt.close();
     }
+
+
 
     public void addPost(String user_username, String content, String ciphered) throws SQLException {
         PreparedStatement pstmt = this.connection.prepareStatement("SELECT user_id FROM User WHERE user_username = ?");
@@ -138,5 +146,23 @@ public class PeerData {
         String user_pubkey = res.getString("user_pubkey");
         pstmt.close();
         return user_pubkey;
+    }
+
+    public Set<String> getSubs() throws SQLException {
+        PreparedStatement pstmt =
+                this.connection.prepareStatement("""
+                        SELECT user_username FROM User
+                        WHERE user_username <> ?
+                        """);
+        pstmt.setString(1, this.username);
+        ResultSet res = pstmt.executeQuery();
+
+        Set<String> ret = new HashSet<>();
+        while (res.next()) {
+            ret.add(res.getString("user_username"));
+        }
+
+        pstmt.close();
+        return ret;
     }
 }
