@@ -10,6 +10,7 @@ import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -19,6 +20,7 @@ import java.util.concurrent.*;
 public class GnuNode implements Runnable {
     public static final int RECEIVETIMEOUT = 5000;
     public static final int PING_FREQ = 5;
+    public static final int UPDATE_FREQ = 5;
     public static final int MAX_NEIGH = 2;
     public static final int HYSTERESIS_FACTOR = 1;
 
@@ -33,8 +35,9 @@ public class GnuNode implements Runnable {
     private final ExecutorService executors;
     private final ExecutorService timeouts;
     private final ServerSocket serverSocket;
+    private final Peer peer;
 
-    public GnuNode(int id, String address, int port) throws IOException {
+    public GnuNode(Peer peer, int id, String address, int port) throws IOException {
         this.peer = peer;
         this.id = id; // TODO hash username
 
@@ -123,7 +126,7 @@ public class GnuNode implements Runnable {
         return false;
     }
 
-    public void send(QueryMessage qm) {
+    public void query(QueryMessage qm) {
         if (!this.sentTo.containsKey(qm.getGuid()))
             this.sentTo.put(qm.getGuid(), new ArrayList<>());
         int nTries = 0;
@@ -150,6 +153,15 @@ public class GnuNode implements Runnable {
         }
     }
 
+    public void updatePosts() {
+        for (String sub : peer.getSubs()) {
+            try {
+                this.query(new QueryMessage(this.addr, this.id, new Query(sub)));
+            } catch (Exception e) {
+                System.out.println("Problem getting info about user: " + sub);
+            }
+        }
+    }
 
     // TODO: PONG caching
     private void ping() {
@@ -213,6 +225,9 @@ public class GnuNode implements Runnable {
         ScheduledExecutorService pingScheduler = Executors.newSingleThreadScheduledExecutor();
         pingScheduler.scheduleAtFixedRate(this::ping, 1, PING_FREQ, TimeUnit.SECONDS);
 
+        ScheduledExecutorService queryScheduler = Executors.newSingleThreadScheduledExecutor();
+        queryScheduler.scheduleAtFixedRate(this::updatePosts, 1, UPDATE_FREQ, TimeUnit.SECONDS);
+
         while (!Thread.currentThread().isInterrupted()) {
             Socket reqSocket;
             try {
@@ -259,10 +274,17 @@ public class GnuNode implements Runnable {
 
     private void handleQuery(QueryMessage reqMsg) {
         // TODO this is only searching by ID
-        if (reqMsg.getQuery().getQueryString().equals(String.valueOf(this.id))) {
+        if (reqMsg.getQuery().getQueryString().equals(this.peer.getPeerData().getUsername())) {
             try (Socket sendSkt = new Socket(reqMsg.getAddr().getAddress(), reqMsg.getAddr().getPort())) {
                 ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
-                QueryHitMessage qhm = new QueryHitMessage(this.addr, reqMsg.getGuid(), Collections.singletonList(String.valueOf(this.id)));
+
+                List<Result> results = new ArrayList<>();
+                for (HashMap<String, String> post : this.peer.getSelfPeerPosts()) {
+                    results.add(new Result(Integer.parseInt(post.get("timestamp")),
+                            post.get("ciphered"), post.get("author")));
+                }
+
+                QueryHitMessage qhm = new QueryHitMessage(this.addr, reqMsg.getGuid(), results);
                 oss.writeObject(qhm);
             } catch (Exception e) {
                 System.err.println("Couldn't connect to initiator peer, with exception:");
@@ -270,15 +292,20 @@ public class GnuNode implements Runnable {
             }
         } else {
             if (reqMsg.decreaseTtl() != 0)
-                send(reqMsg);
+                this.query(reqMsg);
         }
     }
 
     private void handleQueryHit(QueryHitMessage reqMsg) {
         List<Result> hitPosts = reqMsg.getResultSet();
         System.out.println("Query hit from " + reqMsg.getAddr());
-        for(Result post : hitPosts) {
-            System.out.println(post.ciphered);
+        for (Result post : hitPosts) {
+            try {
+                String decipheredText = peer.decypherText(post.ciphered, post.author);
+                System.out.println(decipheredText);
+            } catch (Exception e) {
+                System.out.println("Got a post from someone that does not exist (does not have keys)");
+            }
         }
     }
 

@@ -1,7 +1,5 @@
 package org.t3.g11.proj2.peer;
 
-import org.t3.g11.proj2.keyserver.KeyServer;
-
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
@@ -86,6 +84,15 @@ public class KeyHolder {
 
     public byte[] decrypt(byte[] buf) throws InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
         return this.decrypt(buf, this.publicKey);
+    }
+
+    public String decryptStr(String ciphered, PublicKey publicKey) throws InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+        byte[] buf = Base64.getDecoder().decode(ciphered.getBytes());
+        return new String(this.decrypt(buf, publicKey));
+    }
+
+    public String decryptStr(String ciphered) throws InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+        return this.decryptStr(ciphered, this.publicKey);
     }
 
     public PublicKey genPubKey(byte[] keyBuf) throws InvalidKeySpecException {

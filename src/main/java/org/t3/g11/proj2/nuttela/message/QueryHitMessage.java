@@ -22,5 +22,4 @@ public class QueryHitMessage extends GnuMessage {
     public List<Result> getResultSet() {
         return this.results;
     }
-
 }

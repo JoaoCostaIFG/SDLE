@@ -1,13 +1,13 @@
 package org.t3.g11.proj2.nuttela.message;
 
-public class Result {
-    public final int id;
+import java.io.Serializable;
+
+public class Result implements Serializable {
     public final int date;
     public final String ciphered;
-    public final int author;
+    public final String author;
 
-    public Result(int id, int date, String ciphered, int author) {
-        this.id = id;
+    public Result(int date, String ciphered, String author) {
         this.date = date;
         this.ciphered = ciphered;
         this.author = author;

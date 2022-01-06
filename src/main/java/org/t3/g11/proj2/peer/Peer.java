@@ -20,6 +20,7 @@ import java.security.PublicKey;
 import java.security.spec.InvalidKeySpecException;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.concurrent.CopyOnWriteArraySet;
 
 public class Peer {
     private final ZContext zctx;
@@ -28,12 +29,14 @@ public class Peer {
     private PeerData peerData;
 
     private boolean authenticated;
+    private CopyOnWriteArraySet<String> subs;
     private final KeyHolder keyHolder;
     private final GnuNode node;
     private final Thread nodeT;
 
-    public Peer(ZContext zctx, GnuNode node) throws Exception {
+    public Peer(ZContext zctx, int id, String address, int port) throws Exception {
         this.zctx = zctx;
+        this.subs = new CopyOnWriteArraySet<>();
         this.ksSocket = zctx.createSocket(SocketType.REQ);
         if (!this.ksSocket.connect(KeyServer.ENDPOINT)) {
             System.err.println("Failed to connect to keyserver.");
@@ -43,7 +46,8 @@ public class Peer {
         this.authenticated = false;
         this.keyHolder = new KeyHolder(KeyServer.KEYINSTANCE, KeyServer.KEYSIZE);
 
-        this.node = node;
+        // TODO unfortunate double reference
+        this.node = new GnuNode(this, id, address, port);
         this.nodeT = new Thread(this.node);
     }
 
@@ -77,7 +81,7 @@ public class Peer {
                 KeyHolder.writeKeyToFile(privateKey, username);
             } catch (IOException e) {
                 System.err.printf("Failed to save user's private key to a file. Here it is:\n%s\n",
-                    KeyHolder.encodeKey(privateKey));
+                        KeyHolder.encodeKey(privateKey));
             }
 
             try {
@@ -176,13 +180,69 @@ public class Peer {
     public List<HashMap<String, String>> getSelfPeerPosts() {
         try {
             return peerData.getPostsSelf();
-        }catch (SQLException throwables) {
+        } catch (SQLException throwables) {
             System.err.println(throwables.getMessage());
             return null;
         }
     }
 
-    public void shutdown() {
+
+    private PublicKey getUserKey(String username) {
+        // fetch from cache
+        String pubKeyStr;
+        try {
+            pubKeyStr = this.peerData.getUserKey(username);
+        } catch (SQLException throwables) {
+            pubKeyStr = null;
+        }
+
+        if (pubKeyStr != null) {
+            // key cached
+            try {
+                return this.keyHolder.genPubKey(pubKeyStr);
+            } catch (InvalidKeySpecException e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
+
+        // key not cached
+        return this.lookup(username);
     }
 
+    public String decypherText(String ciphered, String username) throws Exception {
+        PublicKey publicKey = this.getUserKey(username);
+        if (publicKey == null) throw new Exception("User " + username + " not found.");
+
+        return new String(
+                this.keyHolder.decrypt(
+                        Base64.getDecoder().decode(ciphered.getBytes()),
+                        publicKey
+                )
+        );
+    }
+
+    public boolean subscribe(String username) {
+        return this.subs.add(username);
+    }
+
+    public Set<String> getSubs() {
+        return this.subs;
+    }
+
+    public List<HashMap<String, String>> getUserPosts(String username) {
+        try {
+            return this.peerData.getPosts(username);
+        } catch (SQLException throwables) {
+            System.err.println(throwables.getMessage());
+            return null;
+        }
+    }
+
+    public PeerData getPeerData() {
+        return peerData;
+    }
+
+    public void shutdown() {
+    }
 }

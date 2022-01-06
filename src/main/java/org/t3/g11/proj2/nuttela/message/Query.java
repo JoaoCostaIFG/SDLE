@@ -1,6 +1,8 @@
 package org.t3.g11.proj2.nuttela.message;
 
-public class Query {
+import java.io.Serializable;
+
+public class Query implements Serializable {
     public final static int ALLDATE = 0;
 
     private final String queryString;
