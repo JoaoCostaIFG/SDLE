@@ -1,5 +1,6 @@
 package org.t3.g11.proj2.keyserver;
 
+import org.t3.g11.proj2.nuttela.BootstrapGnuNode;
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
@@ -13,14 +14,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class KeyServer {
-    public static final String ENDPOINT = "tcp://localhost:8080";
     public static final String KEYINSTANCE = "RSA";
     public static final int KEYSIZE = 4096;
+    public static final String KEYENDPOINT = "tcp://localhost:8079";
     private static final String workersPushEndpoint = "inproc://workersPush";
     private static final String workersPullEndpoint = "inproc://workersPull";
     private static final String DBRESOURCE = "keyserver.db";
 
     private final Connection keyDB;
+    private final BootstrapGnuNode gnuNode;
+    private final Thread gnuNodeThread;
     private final ZContext zctx;
     private final ZMQ.Socket socket;
     private final ZMQ.Socket workersPush;
@@ -42,7 +45,7 @@ public class KeyServer {
         this.zctx = zctx;
         // open socket
         this.socket = zctx.createSocket(SocketType.ROUTER);
-        this.socket.bind(KeyServer.ENDPOINT);
+        this.socket.bind(KeyServer.KEYENDPOINT);
 
         // internal communication between threads to distribute work
         this.workersPush = zctx.createSocket(SocketType.PUSH);
@@ -63,9 +66,16 @@ public class KeyServer {
             this.workers.add(t);
             t.start();
         }
+
+        this.gnuNode = new BootstrapGnuNode();
+        this.gnuNodeThread = new Thread(this.gnuNode);
+
+        System.out.println("Key server ready!");
     }
 
     public void serverLoop() {
+        this.gnuNodeThread.start();
+
         ZMQ.Poller poller = this.zctx.createPoller(2);
         poller.register(this.socket, ZMQ.Poller.POLLIN);
         poller.register(this.workersPull, ZMQ.Poller.POLLIN);
@@ -81,6 +91,14 @@ public class KeyServer {
                 if (zMsg == null) continue;
                 zMsg.send(this.socket);
             }
+        }
+
+        this.gnuNodeThread.interrupt();
+        try {
+            this.gnuNodeThread.join();
+        } catch (InterruptedException e) {
+            System.out.println("Failed to join GnuNode thread with stacktrace:");
+            e.printStackTrace();
         }
     }
 

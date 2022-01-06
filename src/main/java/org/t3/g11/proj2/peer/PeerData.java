@@ -1,7 +1,6 @@
 package org.t3.g11.proj2.peer;
 
 import java.sql.*;
-import java.sql.Date;
 import java.util.*;
 
 public class PeerData {

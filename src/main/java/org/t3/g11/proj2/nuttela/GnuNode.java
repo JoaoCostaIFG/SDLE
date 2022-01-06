@@ -13,33 +13,34 @@ import java.net.Socket;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.*;
 
 public class GnuNode implements Runnable {
     public static final int RECEIVETIMEOUT = 5000;
     public static final int PING_FREQ = 5;
-    public static final int UPDATE_FREQ = 5;
     public static final int MAX_NEIGH = 2;
     public static final int HYSTERESIS_FACTOR = 1;
 
-    private final Integer id;
+    protected final Integer id;
 
-    private final ConcurrentHashMap<Integer, Set<Integer>> sentTo; // guid => neighbors
-    private final ConcurrentHashMap<Integer, GnuNodeInfo> neighbors;
-    private final CopyOnWriteArraySet<InetSocketAddress> hostsCache;
+    protected final ConcurrentHashMap<Integer, Set<Integer>> sentTo; // guid => neighbors
+    protected final ConcurrentHashMap<Integer, GnuNodeInfo> neighbors;
+    protected final CopyOnWriteArraySet<InetSocketAddress> hostsCache;
 
-    private final InetSocketAddress addr;
-    private final int capacity;
-    private final ExecutorService executors;
-    private final ExecutorService timeouts;
-    private final ServerSocket serverSocket;
-    private final Peer peer;
+    protected final InetSocketAddress addr;
+    protected final int capacity;
+    protected final ExecutorService executors;
+    protected final ExecutorService timeouts;
+    protected final ServerSocket serverSocket;
+    protected final Peer peer;
+    protected final int maxNeigh;
 
-    public GnuNode(Peer peer, int id, String address, int port) throws IOException {
+    public GnuNode(Peer peer, int id, InetSocketAddress addr, int maxNeigh) throws IOException {
         this.peer = peer;
         this.id = id; // TODO hash username
+        this.addr = addr;
+        this.maxNeigh = maxNeigh;
 
         this.neighbors = new ConcurrentHashMap<>();
         this.sentTo = new ConcurrentHashMap<>();
@@ -50,8 +51,11 @@ public class GnuNode implements Runnable {
         this.timeouts = Executors.newCachedThreadPool();
         this.capacity = (int) ((Math.random() * (10 - 2)) + 2);
 
-        this.addr = new InetSocketAddress(address, port);
         this.serverSocket = new ServerSocket(this.addr.getPort(), 100, this.addr.getAddress());
+    }
+
+    public GnuNode(Peer peer, int id, String address, int port) throws IOException {
+        this(peer, id, new InetSocketAddress(address, port), GnuNode.MAX_NEIGH);
     }
 
     public static int IdFromName(String name) {
@@ -66,16 +70,19 @@ public class GnuNode implements Runnable {
         }
     }
 
-    private void bootstrap() {
-        if (this.id == 1) return;
-        this.pickNeighborToDrop(new InetSocketAddress("localhost", 8081));
+    protected void bootstrap(InetSocketAddress bootstrapEndPoint) {
+        this.pickNeighborToDrop(bootstrapEndPoint);
+    }
+
+    protected void bootstrap() {
+        this.pickNeighborToDrop(BootstrapGnuNode.NODEENDPOINT);
     }
 
     /**
-     * NumNeigh ---->
-     * <---- MyNeigh
-     * Neigh    ---->
-     * <---- ACK
+     * --->> NumNeigh
+     * <<--- MyNeigh
+     * --->> Neigh
+     * <<--- ACK
      */
     public boolean pickNeighborToDrop(InetSocketAddress newNeighAddr) {
         try (Socket socket = new Socket(newNeighAddr.getAddress(), newNeighAddr.getPort())) {
@@ -89,10 +96,10 @@ public class GnuNode implements Runnable {
             MyNeighMessage reply = (MyNeighMessage) iss.readObject(); // wait reply
             if (reply.getNeighbors() == MyNeighMessage.REJECT) return false;
 
-            if (this.neighbors.size() + 1 <= GnuNode.MAX_NEIGH) {
+            if (this.neighbors.size() + 1 <= this.maxNeigh) {
                 // we have room
                 oss.writeObject(new NeighMessage(this.addr, this.id, this.neighbors.size(), this.capacity));
-                iss.readObject(); // wait ACK to safely close socket
+                //iss.readObject(); // wait ACK to safely close socket
                 this.neighbors.put(reply.getId(), new GnuNodeInfo(reply.getNeighbors(), reply.getCapacity(), reply.getAddr()));
                 return true;
             } else {
@@ -117,20 +124,25 @@ public class GnuNode implements Runnable {
                     this.neighbors.remove(highestNeigh);
                     this.neighbors.put(reply.getId(), new GnuNodeInfo(reply.getNeighbors(), reply.getCapacity(), reply.getAddr()));
                     oss.writeObject(new NeighMessage(this.addr, this.id, this.neighbors.size(), this.capacity));
-                    iss.readObject(); // wait ACK to safely close socket
+                    //iss.readObject(); // wait ACK to safely close socket
                     return true;
                 } else {
                     oss.writeObject(new NeighMessage(this.addr, this.id, -1, this.capacity));
-                    iss.readObject(); // wait ACK to safely close socket
+                    //iss.readObject(); // wait ACK to safely close socket
                 }
             }
         } catch (ClassNotFoundException | IOException e) {
             System.err.println("Failed to connect to endpoint!");
+            e.printStackTrace();
             return false;
         }
         return false;
     }
 
+    /**
+     * --->> Query
+     * <<--- Ack
+     */
     public void query(QueryMessage qm) {
         Set<Integer> neighSentTo;
         if (this.sentTo.containsKey(qm.getGuid())) {
@@ -168,18 +180,16 @@ public class GnuNode implements Runnable {
         }
     }
 
-    public void fetchSubPosts() {
-        for (String sub : peer.getSubs()) {
-            try {
-                this.query(new QueryMessage(this.addr, this.id, this.addr, sub));
-            } catch (Exception e) {
-                System.err.println("Problem getting info about user: " + sub);
-            }
-        }
+    public void query(String sub) {
+        this.query(new QueryMessage(this.addr, this.id, this.addr, sub));
     }
 
+    /**
+     * --->> Ping
+     * <<--- Pong
+     */
     // TODO: PONG caching
-    private void ping() {
+    protected void ping() {
         // TODO DEBUG purposes
         System.out.println("Neighboors:");
         for (Map.Entry<Integer, GnuNodeInfo> neigh : this.neighbors.entrySet()) {
@@ -238,9 +248,6 @@ public class GnuNode implements Runnable {
         ScheduledExecutorService pingScheduler = Executors.newSingleThreadScheduledExecutor();
         pingScheduler.scheduleAtFixedRate(this::ping, 1, PING_FREQ, TimeUnit.SECONDS);
 
-        ScheduledExecutorService queryScheduler = Executors.newSingleThreadScheduledExecutor();
-        queryScheduler.scheduleAtFixedRate(this::fetchSubPosts, 1, UPDATE_FREQ, TimeUnit.SECONDS);
-
         while (!Thread.currentThread().isInterrupted()) {
             Socket reqSocket;
             try {
@@ -284,7 +291,7 @@ public class GnuNode implements Runnable {
         }
     }
 
-    private void handleQuery(ObjectOutputStream oos, QueryMessage reqMsg) {
+    protected void handleQuery(ObjectOutputStream oos, QueryMessage reqMsg) {
         try {
             GnuMessage ackMsg = GnuNodeCMD.ACK.getMessage(this.addr);
             oos.writeObject(ackMsg);
@@ -319,12 +326,12 @@ public class GnuNode implements Runnable {
         }
     }
 
-    private void handleQueryHit(QueryHitMessage reqMsg) {
+    protected void handleQueryHit(QueryHitMessage reqMsg) {
         List<Result> hitPosts = reqMsg.getResultSet();
         for (Result post : hitPosts) {
             try {
-                String content = peer.decypherText(post.ciphered, post.author);
-                peer.getPeerData().addPost(post.author, content, post.ciphered, post.date);
+                String content = this.peer.decypherText(post.ciphered, post.author);
+                this.peer.getPeerData().addPost(post.author, content, post.ciphered, post.date);
             } catch (Exception e) {
                 System.err.println("Got a post from someone that does not exist (does not have keys)");
                 e.printStackTrace();
@@ -335,7 +342,7 @@ public class GnuNode implements Runnable {
     /**
      * Got a ping so we send a PONG.
      */
-    private void handlePing(ObjectOutputStream oos, GnuMessage reqMsg) {
+    protected void handlePing(ObjectOutputStream oos, GnuMessage reqMsg) {
         // craft reply
         List<InetSocketAddress> addresses = new ArrayList<>(List.of(this.addr));
         for (Map.Entry<Integer, GnuNodeInfo> entry : this.neighbors.entrySet()) {
@@ -353,7 +360,7 @@ public class GnuNode implements Runnable {
         }
     }
 
-    private void handleNumNeigh(ObjectInputStream ois, ObjectOutputStream oos, NumNeighMessage msg) {
+    protected void handleNumNeigh(ObjectInputStream ois, ObjectOutputStream oos, NumNeighMessage msg) {
         GnuMessage reply;
         NeighMessage neighReply;
 
@@ -366,7 +373,7 @@ public class GnuNode implements Runnable {
         }
 
         try {
-            if (maxEntry == null || this.neighbors.size() < GnuNode.MAX_NEIGH || maxEntry.nNeighbors > msg.getNeighbors() + GnuNode.HYSTERESIS_FACTOR) {
+            if (maxEntry == null || this.neighbors.size() < this.maxNeigh || maxEntry.nNeighbors > msg.getNeighbors() + GnuNode.HYSTERESIS_FACTOR) {
                 reply = new MyNeighMessage(this.addr, this.neighbors.size(),
                         this.capacity, this.id);
                 oos.writeObject(reply);
@@ -387,15 +394,17 @@ public class GnuNode implements Runnable {
         this.handleNeigh(oos, neighReply);
     }
 
-    private void handleNeigh(ObjectOutputStream oos, NeighMessage neighReply) {
+    protected void handleNeigh(ObjectOutputStream oos, NeighMessage neighReply) {
         // tell the neighbor that we heard him
+        /*
         try {
             oos.writeObject(GnuNodeCMD.ACK.getMessage(this.addr));
         } catch (Exception e) {
             System.err.println("Failed to connect to Neighbor");
         }
+         */
 
-        if (this.neighbors.size() < GnuNode.MAX_NEIGH) {
+        if (this.neighbors.size() < this.maxNeigh) {
             this.neighbors.put(neighReply.getId(),
                     new GnuNodeInfo(neighReply.getNeighbors(), neighReply.getCapacity(), neighReply.getAddr()));
             return;
@@ -432,7 +441,7 @@ public class GnuNode implements Runnable {
         }
     }
 
-    private void handleDrop(ObjectOutputStream oos, DropMessage reqMsg) {
+    protected void handleDrop(ObjectOutputStream oos, DropMessage reqMsg) {
         GnuMessage reply;
         try {
             if (this.neighbors.size() != 1) {

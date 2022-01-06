@@ -20,8 +20,13 @@ import java.security.PublicKey;
 import java.security.spec.InvalidKeySpecException;
 import java.sql.SQLException;
 import java.util.*;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class Peer {
+    public static final int UPDATE_FREQ = 5;
+
     private final ZContext zctx;
     private final ZMQ.Socket ksSocket;
 
@@ -35,7 +40,7 @@ public class Peer {
     public Peer(ZContext zctx, int id, String address, int port) throws Exception {
         this.zctx = zctx;
         this.ksSocket = zctx.createSocket(SocketType.REQ);
-        if (!this.ksSocket.connect(KeyServer.ENDPOINT)) {
+        if (!this.ksSocket.connect(KeyServer.KEYENDPOINT)) {
             System.err.println("Failed to connect to keyserver.");
             throw new Exception("Failed to connect to keyserver.");
         }
@@ -54,6 +59,19 @@ public class Peer {
 
     public void startNode() {
         this.nodeT.start();
+        // TODO make data member
+        ScheduledExecutorService queryScheduler = Executors.newSingleThreadScheduledExecutor();
+        queryScheduler.scheduleAtFixedRate(this::fetchSubPosts, 1, UPDATE_FREQ, TimeUnit.SECONDS);
+    }
+
+    public void fetchSubPosts() {
+        for (String sub : this.getSubs()) {
+            try {
+                this.node.query(sub);
+            } catch (Exception e) {
+                System.err.println("Problem getting info about user: " + sub);
+            }
+        }
     }
 
     public boolean register(String username) {
@@ -253,7 +271,7 @@ public class Peer {
 
     public List<HashMap<String, String>> getPosts() throws Exception {
         List<HashMap<String, String>> posts = new ArrayList<>();
-        for(String usrnm : this.peerData.getSubs())
+        for (String usrnm : this.peerData.getSubs())
             posts.addAll(this.getUserPosts(usrnm));
         posts.addAll(this.getSelfPeerPosts());
         return posts;
