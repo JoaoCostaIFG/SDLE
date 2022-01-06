@@ -3,6 +3,7 @@ package org.t3.g11.proj2.peer.ui.cmd;
 import org.t3.g11.proj2.TableFormatter;
 import org.t3.g11.proj2.peer.Peer;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Scanner;
@@ -38,6 +39,12 @@ public class AuthenticatedPage implements CmdPage {
                 System.out.print("Tweet content: ");
                 System.out.flush();
                 String content = sc.nextLine();
+
+                if (content.getBytes(StandardCharsets.UTF_8).length > 500) {
+                    System.out.println("Content over character limit (500).");
+                    break;
+                }
+
                 if (!peer.newPost(content))
                     System.out.println("Failed to create post.");
                 else

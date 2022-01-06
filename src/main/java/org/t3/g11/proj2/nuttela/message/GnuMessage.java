@@ -3,11 +3,12 @@ package org.t3.g11.proj2.nuttela.message;
 import org.t3.g11.proj2.nuttela.GnuNodeCMD;
 
 import java.io.Serializable;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
 public class GnuMessage implements Serializable {
     protected final GnuNodeCMD cmd;
-    protected final InetSocketAddress addr;
+    protected InetSocketAddress addr; // hop source address
 
     public GnuMessage(GnuNodeCMD cmd, InetSocketAddress addr) {
         this.cmd = cmd;
@@ -20,5 +21,17 @@ public class GnuMessage implements Serializable {
 
     public InetSocketAddress getAddr() {
         return addr;
+    }
+
+    public void setAddr(InetSocketAddress addr) {
+        this.addr = addr;
+    }
+
+    public InetAddress getInetAddr() {
+        return this.addr.getAddress();
+    }
+
+    public int getPort() {
+        return this.addr.getPort();
     }
 }

@@ -48,6 +48,10 @@ public class Peer {
         this.nodeT = new Thread(this.node);
     }
 
+    public PeerData getPeerData() {
+        return peerData;
+    }
+
     public void startNode() {
         this.nodeT.start();
     }
@@ -247,18 +251,14 @@ public class Peer {
         }
     }
 
-    public PeerData getPeerData() {
-        return peerData;
-    }
-
-    public void shutdown() {
-    }
-
     public List<HashMap<String, String>> getPosts() throws Exception {
         List<HashMap<String, String>> posts = new ArrayList<>();
         for(String usrnm : this.peerData.getSubs())
             posts.addAll(this.getUserPosts(usrnm));
         posts.addAll(this.getSelfPeerPosts());
         return posts;
+    }
+
+    public void shutdown() {
     }
 }

@@ -1,6 +1,7 @@
 package org.t3.g11.proj2.peer;
 
 import java.sql.*;
+import java.sql.Date;
 import java.util.*;
 
 public class PeerData {
@@ -60,19 +61,18 @@ public class PeerData {
         this.addUser(this.username, pubkey);
     }
 
-    public void addPost(int user_id, String content, String ciphered) throws SQLException {
-        PreparedStatement pstmt = this.connection.prepareStatement("INSERT INTO Post(post_content, post_ciphered, user_id) VALUES(?, ?, ?)");
+    public void addPost(int user_id, String content, String ciphered, long date) throws SQLException {
+        PreparedStatement pstmt = this.connection.prepareStatement("INSERT INTO Post(post_content, post_ciphered, user_id, post_date) VALUES(?, ?, ?, ?)");
         System.out.println("Content: " + content);
         pstmt.setString(1, content);
         pstmt.setString(2, ciphered);
         pstmt.setInt(3, user_id);
+        pstmt.setLong(4, date);
         pstmt.executeUpdate();
         pstmt.close();
     }
 
-
-
-    public void addPost(String user_username, String content, String ciphered) throws SQLException {
+    public void addPost(String user_username, String content, String ciphered, long date) throws SQLException {
         PreparedStatement pstmt = this.connection.prepareStatement("SELECT user_id FROM User WHERE user_username = ?");
         pstmt.setString(1, user_username);
         ResultSet res = pstmt.executeQuery();
@@ -80,7 +80,7 @@ public class PeerData {
         int user_id = res.getInt("user_id");
         pstmt.close();
 
-        this.addPost(user_id, content, ciphered);
+        this.addPost(user_id, content, ciphered, date);
     }
 
     public List<HashMap<String, String>> getPosts(int user_id) throws SQLException {
@@ -135,7 +135,7 @@ public class PeerData {
     }
 
     public void addPostSelf(String content, String ciphered) throws SQLException {
-        this.addPost(this.username, content, ciphered);
+        this.addPost(this.username, content, ciphered, System.currentTimeMillis() / 1000L);
     }
 
     public String getUserKey(String user_username) throws SQLException {

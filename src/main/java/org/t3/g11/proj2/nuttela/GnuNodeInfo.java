@@ -1,8 +1,13 @@
 package org.t3.g11.proj2.nuttela;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
 public class GnuNodeInfo {
+    public static final int DEAD = 0;
+    public static final int ALIVE = 1;
+    public static final int DETERMINING = 2;
+
     public int nNeighbors;
     public int capacity;
     public InetSocketAddress address;
@@ -20,15 +25,27 @@ public class GnuNodeInfo {
         this.capacity = 0;
     }
 
+    public boolean isDead() {
+        return this.state == GnuNodeInfo.DEAD;
+    }
+
     public void setDead() {
-        this.state = 0;
+        this.state = GnuNodeInfo.DEAD;
     }
 
     public void setAlive() {
-        this.state = 1;
+        this.state = GnuNodeInfo.ALIVE;
     }
 
     public void setDetermining() {
-        this.state = 2;
+        this.state = GnuNodeInfo.DETERMINING;
+    }
+
+    public InetAddress getInetAddr() {
+        return this.address.getAddress();
+    }
+
+    public int getPort() {
+        return this.address.getPort();
     }
 }

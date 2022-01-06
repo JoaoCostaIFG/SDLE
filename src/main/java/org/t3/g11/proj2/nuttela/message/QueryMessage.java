@@ -28,9 +28,8 @@ public class QueryMessage extends GnuMessage {
         }
     }
 
-
-    public QueryMessage(InetSocketAddress addr, int id, String queryString) {
-        this(addr, id, new Query(queryString));
+    public QueryMessage(InetSocketAddress addr, int id, InetSocketAddress sourceAddr, String queryString) {
+        this(addr, id, new Query(sourceAddr, queryString));
     }
 
     private int genGUID(String guidStr) {
