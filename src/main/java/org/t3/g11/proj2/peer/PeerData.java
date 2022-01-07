@@ -118,7 +118,7 @@ public class PeerData {
         return this.getPosts(user_id);
     }
 
-    public int getIdFromUsername(String username) throws SQLException{
+    public int getIdFromUsername(String username) throws SQLException {
         PreparedStatement pstmt = this.connection.prepareStatement("SELECT user_id FROM User WHERE user_username = ?");
         pstmt.setString(1, username);
         ResultSet res = pstmt.executeQuery();

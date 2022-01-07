@@ -1,5 +1,6 @@
 package org.t3.g11.proj2.nuttela;
 
+import org.t3.g11.proj2.keyserver.BootstrapGnuNode;
 import org.t3.g11.proj2.nuttela.message.*;
 import org.t3.g11.proj2.peer.Peer;
 
@@ -78,6 +79,24 @@ public class GnuNode implements Runnable {
         this.pickNeighborToDrop(BootstrapGnuNode.NODEENDPOINT);
     }
 
+    protected void dropNeigh(GnuNodeInfo toDrop) {
+        try (Socket dropSocket = new Socket(toDrop.address.getAddress(), toDrop.address.getPort())) {
+            ObjectOutputStream oos = new ObjectOutputStream(dropSocket.getOutputStream());
+            ObjectInputStream ois = new ObjectInputStream(dropSocket.getInputStream());
+
+            oos.writeObject(new DropMessage(this.addr, this.id));
+            GnuMessage dropReply = (GnuMessage) ois.readObject();
+
+            // we can temporarily go over the neighbor limit
+            if (dropReply.getCmd() == GnuNodeCMD.DROPOK) {
+                this.neighbors.remove(toDrop.getId());
+            }
+        } catch (ClassNotFoundException | IOException e) {
+            this.neighbors.remove(toDrop.getId());
+            System.err.println("Failed to connect to endpoint for drop!");
+        }
+    }
+
     /**
      * --->> NumNeigh
      * <<--- MyNeigh
@@ -90,58 +109,53 @@ public class GnuNode implements Runnable {
             ObjectInputStream iss = new ObjectInputStream(socket.getInputStream());
 
             // ask if peer wants to become neighbor
-            GnuMessage msg = new NumNeighMessage(this.addr, this.neighbors.size());
-            oss.writeObject(msg);
-            // check if it wants
+            oss.writeObject(new NumNeighMessage(this.addr, this.neighbors.size()));
             MyNeighMessage reply = (MyNeighMessage) iss.readObject(); // wait reply
-            if (reply.getNeighbors() == MyNeighMessage.REJECT) return false;
+            if (reply.getNeighbors() == MyNeighMessage.REJECT) return false; // check if it wants to be our neighbor
 
             if (this.neighbors.size() + 1 <= this.maxNeigh) {
                 // we have room
                 oss.writeObject(new NeighMessage(this.addr, this.id, this.neighbors.size(), this.capacity));
-                //iss.readObject(); // wait ACK to safely close socket
-                this.neighbors.put(reply.getId(), new GnuNodeInfo(reply.getNeighbors(), reply.getCapacity(), reply.getAddr()));
+                this.neighbors.put(reply.getId(),
+                        new GnuNodeInfo(reply.getId(), reply.getNeighbors(), reply.getCapacity(), reply.getAddr()));
                 return true;
-            } else {
-                Integer highestNeigh = Collections.max(neighbors.entrySet(),
-                        Comparator.comparingInt(e -> (e.getValue()).nNeighbors)).getKey();
-                GnuNodeInfo toDrop = this.neighbors.get(highestNeigh);
-                if (toDrop.nNeighbors > reply.getNeighbors() + 1) {
-                    Socket dropSocket = new Socket(toDrop.address.getAddress(), toDrop.address.getPort());
-                    ObjectOutputStream dropOos = new ObjectOutputStream(dropSocket.getOutputStream());
-                    DropMessage dm = new DropMessage(this.addr, this.id);
-                    dropOos.writeObject(dm);
-
-                    ObjectInputStream dropOis = new ObjectInputStream(dropSocket.getInputStream());
-                    GnuMessage dropReply = (GnuMessage) dropOis.readObject();
-
-                    if (dropReply.getCmd() != GnuNodeCMD.DROPOK) {
-                        NeighMessage nm = new NeighMessage(this.addr, this.id, -1, this.capacity);
-                        oss.writeObject(nm);
-                        return false;
-                    }
-
-                    this.neighbors.remove(highestNeigh);
-                    this.neighbors.put(reply.getId(), new GnuNodeInfo(reply.getNeighbors(), reply.getCapacity(), reply.getAddr()));
-                    oss.writeObject(new NeighMessage(this.addr, this.id, this.neighbors.size(), this.capacity));
-                    //iss.readObject(); // wait ACK to safely close socket
-                    return true;
-                } else {
-                    oss.writeObject(new NeighMessage(this.addr, this.id, -1, this.capacity));
-                    //iss.readObject(); // wait ACK to safely close socket
-                }
             }
+
+            // need to drop a neighbor -> filter neighbors with lower capacity -> get the one with the msot neighbors
+            List<Map.Entry<Integer, GnuNodeInfo>> dropCandidates = this.neighbors.entrySet().stream()
+                    .filter(e -> e.getValue().capacity < reply.getCapacity()).toList();
+            if (dropCandidates.isEmpty()) { // reject Y
+                oss.writeObject(new NeighMessage(this.addr, this.id, -1, this.capacity));
+                return false;
+            }
+            GnuNodeInfo toDrop =
+                    Collections.max(dropCandidates, Comparator.comparingInt(e -> e.getValue().nNeighbors)).getValue();
+            // also need the neighbor with the most capacity
+            GnuNodeInfo maxCap =
+                    Collections.max(this.neighbors.entrySet().stream().toList(), Comparator.comparingInt(e -> e.getValue().capacity)).getValue();
+            // test to accept
+            if (reply.getCapacity() > maxCap.capacity ||
+                    toDrop.nNeighbors > reply.getNeighbors() + GnuNode.HYSTERESIS_FACTOR) {
+                // accept Y
+                this.neighbors.put(reply.getId(), new GnuNodeInfo(reply.getId(), reply.getNeighbors(), reply.getCapacity(), reply.getAddr()));
+                oss.writeObject(new NeighMessage(this.addr, this.id, this.neighbors.size(), this.capacity));
+                this.dropNeigh(toDrop);
+                return true;
+            }
+
+            // otherwise just reject Y
+            oss.writeObject(new NeighMessage(this.addr, this.id, -1, this.capacity));
+            return false;
         } catch (ClassNotFoundException | IOException e) {
-            System.err.println("Failed to connect to endpoint!");
+            System.err.println("Failed to connect to endpoint for neigh!");
             e.printStackTrace();
             return false;
         }
-        return false;
     }
 
     /**
      * --->> Query
-     * <<--- Ack
+     * <<--- ACK
      */
     public void query(QueryMessage qm) {
         Set<Integer> neighSentTo;
@@ -210,7 +224,7 @@ public class GnuNode implements Runnable {
                 sockPing.setSoTimeout(GnuNode.RECEIVETIMEOUT);
                 ObjectOutputStream oss = new ObjectOutputStream(sockPing.getOutputStream());
                 oss.writeObject(pingMsg);
-                // try to receive the reply
+                // try to receive the reply (Pong)
                 InputStream is = sockPing.getInputStream();
                 ObjectInputStream iss = new ObjectInputStream(is);
                 reply = (PongMessage) iss.readObject();
@@ -291,6 +305,9 @@ public class GnuNode implements Runnable {
         }
     }
 
+    /**
+     * --->> Ack
+     */
     protected void handleQuery(ObjectOutputStream oos, QueryMessage reqMsg) {
         try {
             GnuMessage ackMsg = GnuNodeCMD.ACK.getMessage(this.addr);
@@ -326,6 +343,9 @@ public class GnuNode implements Runnable {
         }
     }
 
+    /**
+     * <<--- QueryHit
+     */
     protected void handleQueryHit(QueryHitMessage reqMsg) {
         List<Result> hitPosts = reqMsg.getResultSet();
         for (Result post : hitPosts) {
@@ -340,7 +360,8 @@ public class GnuNode implements Runnable {
     }
 
     /**
-     * Got a ping so we send a PONG.
+     * <<--- Ping
+     * --->> Pong
      */
     protected void handlePing(ObjectOutputStream oos, GnuMessage reqMsg) {
         // craft reply
@@ -360,6 +381,10 @@ public class GnuNode implements Runnable {
         }
     }
 
+    /**
+     * <<--- NumNeigh
+     * --->> MyNeigh
+     */
     protected void handleNumNeigh(ObjectInputStream ois, ObjectOutputStream oos, NumNeighMessage msg) {
         GnuMessage reply;
         NeighMessage neighReply;
@@ -391,22 +416,18 @@ public class GnuNode implements Runnable {
             return;
         }
 
-        this.handleNeigh(oos, neighReply);
+        this.handleNeigh(neighReply);
     }
 
-    protected void handleNeigh(ObjectOutputStream oos, NeighMessage neighReply) {
-        // tell the neighbor that we heard him
-        /*
-        try {
-            oos.writeObject(GnuNodeCMD.ACK.getMessage(this.addr));
-        } catch (Exception e) {
-            System.err.println("Failed to connect to Neighbor");
-        }
-         */
+    /**
+     * <<--- Neigh
+     */
+    protected void handleNeigh(NeighMessage neighReply) {
+        // TODO might need to ACK sender
 
         if (this.neighbors.size() < this.maxNeigh) {
             this.neighbors.put(neighReply.getId(),
-                    new GnuNodeInfo(neighReply.getNeighbors(), neighReply.getCapacity(), neighReply.getAddr()));
+                    new GnuNodeInfo(neighReply.getId(), neighReply.getNeighbors(), neighReply.getCapacity(), neighReply.getAddr()));
             return;
         }
 
@@ -434,17 +455,21 @@ public class GnuNode implements Runnable {
 
             // we can temporarily go over the neighbor limit
             this.neighbors.put(neighReply.getId(),
-                    new GnuNodeInfo(neighReply.getNeighbors(), neighReply.getCapacity(), neighReply.getAddr()));
+                    new GnuNodeInfo(neighReply.getId(), neighReply.getNeighbors(), neighReply.getCapacity(), neighReply.getAddr()));
             if (reply.getCmd() == GnuNodeCMD.DROPOK) {
                 this.neighbors.remove(maxEntry.getKey());
             }
         }
     }
 
+    /**
+     * <<--- Drop
+     * --->> DropOk OR DropErr
+     */
     protected void handleDrop(ObjectOutputStream oos, DropMessage reqMsg) {
         GnuMessage reply;
         try {
-            if (this.neighbors.size() != 1) {
+            if (this.neighbors.size() > 1) {
                 reply = GnuNodeCMD.DROPOK.getMessage(this.addr);
                 oos.writeObject(reply);
                 this.neighbors.remove(reqMsg.getId());

@@ -1,5 +1,7 @@
-package org.t3.g11.proj2.nuttela;
+package org.t3.g11.proj2.keyserver;
 
+import org.t3.g11.proj2.nuttela.GnuNode;
+import org.t3.g11.proj2.nuttela.GnuNodeCMD;
 import org.t3.g11.proj2.nuttela.message.GnuMessage;
 import org.t3.g11.proj2.nuttela.message.QueryHitMessage;
 import org.t3.g11.proj2.nuttela.message.QueryMessage;

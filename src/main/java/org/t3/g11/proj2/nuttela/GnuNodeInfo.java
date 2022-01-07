@@ -8,12 +8,14 @@ public class GnuNodeInfo {
     public static final int ALIVE = 1;
     public static final int DETERMINING = 2;
 
+    public int id;
     public int nNeighbors;
     public int capacity;
     public InetSocketAddress address;
     public int state; // 0 - dead; 1 - alive; 2 - determining;
 
-    public GnuNodeInfo(int nNeighbors, int capacity, InetSocketAddress address) {
+    public GnuNodeInfo(int id, int nNeighbors, int capacity, InetSocketAddress address) {
+        this.id = id;
         this.nNeighbors = nNeighbors;
         this.capacity = capacity;
         this.state = 1;
@@ -23,6 +25,10 @@ public class GnuNodeInfo {
     public GnuNodeInfo(int nNeighbors) {
         this.nNeighbors = nNeighbors;
         this.capacity = 0;
+    }
+
+    public int getId() {
+        return this.id;
     }
 
     public boolean isDead() {
