@@ -292,8 +292,8 @@ public class GnuNode implements Runnable {
         }
 
         for (Integer drop : toDrop) {
+            this.hostsCache.remove(this.neighbors.get(drop).getAddr());
             this.neighbors.remove(drop);
-            this.hostsCache.remove(drop);
         }
     }
 

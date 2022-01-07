@@ -51,6 +51,10 @@ public class GnuNodeInfo {
         return this.address.getAddress();
     }
 
+    public InetSocketAddress getAddr() {
+        return this.address;
+    }
+
     public int getPort() {
         return this.address.getPort();
     }
