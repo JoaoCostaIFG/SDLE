@@ -20,7 +20,9 @@ import java.util.concurrent.*;
 public class GnuNode implements Runnable {
     public static final int RECEIVETIMEOUT = 5000;
     public static final int PING_FREQ = 5;
+    public static final int CHECK_TOPOLOGY_FREQ = 5;
     public static final int DROP_DEAD_FREQ = 10; //To only drop neighbors after 2 failed pings
+    public static final int MIN_NEIGH = 1;
     public static final int MAX_NEIGH = 2;
     public static final int HYSTERESIS_FACTOR = 1;
 
@@ -34,6 +36,7 @@ public class GnuNode implements Runnable {
     protected final int capacity;
     protected final ExecutorService executors;
     protected final ExecutorService timeouts;
+    protected final ScheduledExecutorService checkTopologyScheduler;
     protected final ServerSocket serverSocket;
     protected final Peer peer;
     protected final int maxNeigh;
@@ -51,6 +54,7 @@ public class GnuNode implements Runnable {
         int max_reqs = Runtime.getRuntime().availableProcessors() + 1;
         this.executors = Executors.newFixedThreadPool(max_reqs);
         this.timeouts = Executors.newCachedThreadPool();
+        this.checkTopologyScheduler = Executors.newSingleThreadScheduledExecutor();
         this.capacity = (int) ((Math.random() * (10 - 2)) + 2);
 
         this.serverSocket = new ServerSocket(this.addr.getPort(), 100, this.addr.getAddress());
@@ -239,15 +243,22 @@ public class GnuNode implements Runnable {
             peerNode.setAlive(); // peer is good
             // update the hosts cache
             peerNode.nNeighbors = reply.getNeighAddrs().size();
-            Set<InetSocketAddress> unknownAddrs = new HashSet<>();
-            for (InetSocketAddress address : reply.getNeighAddrs()) {
-                if (!this.hostsCache.add(address))
-                    unknownAddrs.add(address);
-            }
-            // TODO only do this periodically
-            for (InetSocketAddress newNeighbor : unknownAddrs) {
-                this.pickNeighborToDrop(newNeighbor);
-            }
+            this.hostsCache.addAll(reply.getNeighAddrs());
+        }
+    }
+
+    protected void checkTopology() {
+        double satisfaction = this.getSatisfaction();
+        if (satisfaction < 1.0) {
+            this.addNewNeighs();
+        }
+        int delay = (int)(CHECK_TOPOLOGY_FREQ * satisfaction);
+        this.checkTopologyScheduler.schedule(this::checkTopology, delay, TimeUnit.SECONDS);
+    }
+
+    protected void addNewNeighs() {
+        for (InetSocketAddress newNeighbor : this.hostsCache) {
+            this.pickNeighborToDrop(newNeighbor);
         }
     }
 
@@ -265,6 +276,10 @@ public class GnuNode implements Runnable {
 
         ScheduledExecutorService dropDeadHostsScheduler = Executors.newSingleThreadScheduledExecutor();
         dropDeadHostsScheduler.scheduleAtFixedRate(this::dropDeadHosts, 12, DROP_DEAD_FREQ, TimeUnit.SECONDS);
+
+
+        // TODO varying interval according to satisfaction
+        this.checkTopologyScheduler.schedule(this::checkTopology, 5, TimeUnit.SECONDS);
 
         while (!Thread.currentThread().isInterrupted()) {
             Socket reqSocket;
@@ -498,5 +513,20 @@ public class GnuNode implements Runnable {
         } catch (IOException e) {
             System.err.println("DROP handling failed.");
         }
+    }
+
+    protected double getSatisfaction() {
+        if (this.neighbors.size() < MIN_NEIGH) return 0;
+
+        double satLevel = 0;
+        for (GnuNodeInfo neigh : this.neighbors.values()) {
+            satLevel += ((float)neigh.capacity / neigh.nNeighbors);
+        }
+        satLevel /= this.capacity;
+
+        if (satLevel > 1.0 || this.neighbors.size() >= MAX_NEIGH)
+            return 1;
+
+        return satLevel;
     }
 }
