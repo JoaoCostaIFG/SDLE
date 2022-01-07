@@ -20,6 +20,7 @@ import java.util.concurrent.*;
 public class GnuNode implements Runnable {
     public static final int RECEIVETIMEOUT = 5000;
     public static final int PING_FREQ = 5;
+    public static final int DROP_DEAD_FREQ = 10;
     public static final int MAX_NEIGH = 2;
     public static final int HYSTERESIS_FACTOR = 1;
 
@@ -262,6 +263,9 @@ public class GnuNode implements Runnable {
         ScheduledExecutorService pingScheduler = Executors.newSingleThreadScheduledExecutor();
         pingScheduler.scheduleAtFixedRate(this::ping, 1, PING_FREQ, TimeUnit.SECONDS);
 
+        ScheduledExecutorService dropDeadHostsScheduler = Executors.newSingleThreadScheduledExecutor();
+        dropDeadHostsScheduler.scheduleAtFixedRate(this::dropDeadHosts, 2, DROP_DEAD_FREQ, TimeUnit.SECONDS);
+
         while (!Thread.currentThread().isInterrupted()) {
             Socket reqSocket;
             try {
@@ -277,6 +281,18 @@ public class GnuNode implements Runnable {
         }
 
         pingScheduler.shutdownNow();
+    }
+
+    private void dropDeadHosts() {
+        List<Integer> toDrop = new ArrayList<>();
+        for (Map.Entry<Integer, GnuNodeInfo> entry : this.neighbors.entrySet()) {
+            if (entry.getValue().state == 0) {
+                toDrop.add(entry.getKey());
+            }
+        }
+
+        for (Integer drop : toDrop)
+            this.neighbors.remove(drop);
     }
 
     public void handleMessage(ObjectInputStream ois, ObjectOutputStream oos) {
