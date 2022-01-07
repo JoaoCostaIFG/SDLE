@@ -291,8 +291,10 @@ public class GnuNode implements Runnable {
             }
         }
 
-        for (Integer drop : toDrop)
+        for (Integer drop : toDrop) {
             this.neighbors.remove(drop);
+            this.hostsCache.remove(drop);
+        }
     }
 
     public void handleMessage(ObjectInputStream ois, ObjectOutputStream oos) {
