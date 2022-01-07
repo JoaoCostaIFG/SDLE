@@ -1,5 +1,7 @@
 package org.t3.g11.proj2.peer;
 
+import org.t3.g11.proj2.utils.Utils;
+
 import java.sql.*;
 import java.util.*;
 
@@ -30,7 +32,7 @@ public class PeerData {
         stmt.execute("""
                 CREATE TABLE Post (
                   post_id INTEGER PRIMARY KEY ASC,
-                  post_date INTEGER NOT NULL DEFAULT (strftime('%s', CURRENT_TIMESTAMP)),
+                  post_date INTEGER NOT NULL,
                   post_ciphered TEXT NOT NULL,
                   post_content TEXT NOT NULL,
                   user_id INTEGER NOT NULL,
@@ -60,18 +62,19 @@ public class PeerData {
         this.addUser(this.username, pubkey);
     }
 
-    public void addPost(int user_id, String content, String ciphered, long date) throws SQLException {
-        PreparedStatement pstmt = this.connection.prepareStatement("INSERT INTO Post(post_content, post_ciphered, user_id, post_date) VALUES(?, ?, ?, ?)");
+    public void addPost(int user_id, int guid, String content, String ciphered, long date) throws SQLException {
+        PreparedStatement pstmt = this.connection.prepareStatement("INSERT INTO Post(post_id, post_content, post_ciphered, user_id, post_date) VALUES(?, ?, ?, ?, ?)");
         System.out.println("Content: " + content);
-        pstmt.setString(1, content);
-        pstmt.setString(2, ciphered);
-        pstmt.setInt(3, user_id);
-        pstmt.setLong(4, date);
+        pstmt.setInt(1, guid);
+        pstmt.setString(2, content);
+        pstmt.setString(3, ciphered);
+        pstmt.setInt(4, user_id);
+        pstmt.setLong(5, date);
         pstmt.executeUpdate();
         pstmt.close();
     }
 
-    public void addPost(String user_username, String content, String ciphered, long date) throws SQLException {
+    public void addPost(String user_username, int guid, String content, String ciphered, long date) throws SQLException {
         PreparedStatement pstmt = this.connection.prepareStatement("SELECT user_id FROM User WHERE user_username = ?");
         pstmt.setString(1, user_username);
         ResultSet res = pstmt.executeQuery();
@@ -79,7 +82,13 @@ public class PeerData {
         int user_id = res.getInt("user_id");
         pstmt.close();
 
-        this.addPost(user_id, content, ciphered, date);
+        this.addPost(user_id, guid, content, ciphered, date);
+    }
+
+    public void addPostSelf(String content, String ciphered) throws SQLException {
+        long timestamp = System.currentTimeMillis();
+        String toHash = this.username + timestamp;
+        this.addPost(this.username, Utils.IdFromName(toHash), content, ciphered, timestamp);
     }
 
     public List<HashMap<String, String>> getPosts(int user_id) throws SQLException {
@@ -96,6 +105,7 @@ public class PeerData {
         List<HashMap<String, String>> ret = new ArrayList<>();
         while (res.next()) {
             HashMap<String, String> elem = new HashMap<>();
+            elem.put("guid", res.getString("post_id"));
             elem.put("author", res.getString("user_username"));
             elem.put("timestamp", res.getString("post_date"));
             elem.put("content", res.getString("post_content"));
@@ -131,10 +141,6 @@ public class PeerData {
 
     public List<HashMap<String, String>> getPostsSelf() throws SQLException {
         return this.getPosts(this.username);
-    }
-
-    public void addPostSelf(String content, String ciphered) throws SQLException {
-        this.addPost(this.username, content, ciphered, System.currentTimeMillis() / 1000L);
     }
 
     public String getUserKey(String user_username) throws SQLException {

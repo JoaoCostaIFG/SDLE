@@ -1,5 +1,7 @@
 package org.t3.g11.proj2.nuttela;
 
+import com.google.common.hash.BloomFilter;
+import com.google.common.hash.Funnels;
 import org.t3.g11.proj2.keyserver.BootstrapGnuNode;
 import org.t3.g11.proj2.nuttela.message.*;
 import org.t3.g11.proj2.peer.Peer;
@@ -12,6 +14,7 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.*;
@@ -40,12 +43,17 @@ public class GnuNode implements Runnable {
     protected final ServerSocket serverSocket;
     protected final Peer peer;
     protected final int maxNeigh;
+    protected final BloomFilter<String> bloomFilter;
 
     public GnuNode(Peer peer, int id, InetSocketAddress addr, int maxNeigh) throws IOException {
         this.peer = peer;
         this.id = id; // TODO hash username
         this.addr = addr;
         this.maxNeigh = maxNeigh;
+        this.bloomFilter = BloomFilter.create(
+                Funnels.stringFunnel(StandardCharsets.UTF_8),
+                this.maxNeigh * 2,
+                GnuNodeInfo.BLOOMMISSCHANCE);
 
         this.neighbors = new ConcurrentHashMap<>();
         this.sentTo = new ConcurrentHashMap<>();
@@ -62,18 +70,6 @@ public class GnuNode implements Runnable {
 
     public GnuNode(Peer peer, int id, String address, int port) throws IOException {
         this(peer, id, new InetSocketAddress(address, port), GnuNode.MAX_NEIGH);
-    }
-
-    public static int IdFromName(String name) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(name.getBytes());
-            ByteBuffer wrapped = ByteBuffer.wrap(hash);
-            return wrapped.getInt();
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-            return -1;
-        }
     }
 
     protected void bootstrap(InetSocketAddress bootstrapEndPoint) {
@@ -120,9 +116,9 @@ public class GnuNode implements Runnable {
 
             if (this.neighbors.size() + 1 <= this.maxNeigh) {
                 // we have room
-                oss.writeObject(new NeighMessage(this.addr, this.id, this.neighbors.size(), this.capacity));
+                oss.writeObject(new NeighMessage(this.addr, this.id, this.neighbors.size(), this.capacity, this.bloomFilter));
                 this.neighbors.put(reply.getId(),
-                        new GnuNodeInfo(reply.getId(), reply.getNeighbors(), reply.getCapacity(), reply.getAddr()));
+                        new GnuNodeInfo(reply.getId(), reply.getNeighbors(), reply.getCapacity(), reply.getAddr(), reply.getBloomFilter()));
                 return true;
             }
 
@@ -130,7 +126,7 @@ public class GnuNode implements Runnable {
             List<Map.Entry<Integer, GnuNodeInfo>> dropCandidates = this.neighbors.entrySet().stream()
                     .filter(e -> e.getValue().capacity < reply.getCapacity()).toList();
             if (dropCandidates.isEmpty()) { // reject Y
-                oss.writeObject(new NeighMessage(this.addr, this.id, -1, this.capacity));
+                oss.writeObject(new NeighMessage(this.addr, this.id, -1, this.capacity, this.bloomFilter));
                 return false;
             }
             GnuNodeInfo toDrop =
@@ -142,14 +138,14 @@ public class GnuNode implements Runnable {
             if (reply.getCapacity() > maxCap.capacity ||
                     toDrop.nNeighbors > reply.getNeighbors() + GnuNode.HYSTERESIS_FACTOR) {
                 // accept Y
-                this.neighbors.put(reply.getId(), new GnuNodeInfo(reply.getId(), reply.getNeighbors(), reply.getCapacity(), reply.getAddr()));
-                oss.writeObject(new NeighMessage(this.addr, this.id, this.neighbors.size(), this.capacity));
+                this.neighbors.put(reply.getId(), new GnuNodeInfo(reply.getId(), reply.getNeighbors(), reply.getCapacity(), reply.getAddr(), reply.getBloomFilter()));
+                oss.writeObject(new NeighMessage(this.addr, this.id, this.neighbors.size(), this.capacity, this.bloomFilter));
                 this.dropNeigh(toDrop);
                 return true;
             }
 
             // otherwise just reject Y
-            oss.writeObject(new NeighMessage(this.addr, this.id, -1, this.capacity));
+            oss.writeObject(new NeighMessage(this.addr, this.id, -1, this.capacity, null));
             return false;
         } catch (ClassNotFoundException | IOException e) {
             System.err.println("Failed to connect to endpoint for neigh!");
@@ -242,8 +238,9 @@ public class GnuNode implements Runnable {
             // process the reply
             peerNode.setAlive(); // peer is good
             // update the hosts cache
-            peerNode.nNeighbors = reply.getNeighAddrs().size();
             this.hostsCache.addAll(reply.getNeighAddrs());
+            // update node info
+            peerNode.updateInfo(reply);
         }
     }
 
@@ -252,7 +249,9 @@ public class GnuNode implements Runnable {
         if (satisfaction < 1.0) {
             this.addNewNeighs();
         }
-        int delay = (int)(CHECK_TOPOLOGY_FREQ * satisfaction);
+
+        // schedule next topology check with new delay according to satisfaction level
+        int delay = (int) (CHECK_TOPOLOGY_FREQ * satisfaction);
         this.checkTopologyScheduler.schedule(this::checkTopology, delay, TimeUnit.SECONDS);
     }
 
@@ -277,8 +276,6 @@ public class GnuNode implements Runnable {
         ScheduledExecutorService dropDeadHostsScheduler = Executors.newSingleThreadScheduledExecutor();
         dropDeadHostsScheduler.scheduleAtFixedRate(this::dropDeadHosts, 12, DROP_DEAD_FREQ, TimeUnit.SECONDS);
 
-
-        // TODO varying interval according to satisfaction
         this.checkTopologyScheduler.schedule(this::checkTopology, 5, TimeUnit.SECONDS);
 
         while (!Thread.currentThread().isInterrupted()) {
@@ -358,7 +355,7 @@ public class GnuNode implements Runnable {
 
                 List<Result> results = new ArrayList<>();
                 for (HashMap<String, String> post : this.peer.getSelfPeerPosts()) {
-                    results.add(new Result(Long.parseLong(post.get("timestamp")),
+                    results.add(new Result(Integer.parseInt(post.get("guid")), Long.parseLong(post.get("timestamp")),
                             post.get("ciphered"), post.get("author")));
                 }
 
@@ -384,7 +381,7 @@ public class GnuNode implements Runnable {
         for (Result post : hitPosts) {
             try {
                 String content = this.peer.decypherText(post.ciphered, post.author);
-                this.peer.getPeerData().addPost(post.author, content, post.ciphered, post.date);
+                this.peer.getPeerData().addPost(post.author, post.guid, content, post.ciphered, post.date);
             } catch (Exception e) {
                 System.err.println("Got a post from someone that does not exist (does not have keys)");
                 e.printStackTrace();
@@ -403,11 +400,10 @@ public class GnuNode implements Runnable {
             InetSocketAddress eAddr = entry.getValue().address;
             if (!reqMsg.getAddr().equals(eAddr)) addresses.add(eAddr);
         }
-        GnuMessage replyMsg = new PongMessage(this.addr, addresses);
-
+        // reply to the same socket
+        GnuMessage pongMsg = new PongMessage(this.addr, addresses, this.capacity, this.bloomFilter);
         try {
-            // reply to the same socket
-            oos.writeObject(replyMsg);
+            oos.writeObject(pongMsg);
         } catch (IOException e) {
             System.err.println("Ping handling failed.");
             e.printStackTrace();
@@ -433,11 +429,11 @@ public class GnuNode implements Runnable {
         try {
             if (maxEntry == null || this.neighbors.size() < this.maxNeigh || maxEntry.nNeighbors > msg.getNeighbors() + GnuNode.HYSTERESIS_FACTOR) {
                 reply = new MyNeighMessage(this.addr, this.neighbors.size(),
-                        this.capacity, this.id);
+                        this.capacity, this.id, this.bloomFilter);
                 oos.writeObject(reply);
 
             } else {
-                reply = new MyNeighMessage(this.addr, -1, this.capacity, this.id);
+                reply = new MyNeighMessage(this.addr, -1, this.capacity, this.id, null);
                 oos.writeObject(reply);
                 return;
             }
@@ -458,9 +454,10 @@ public class GnuNode implements Runnable {
     protected void handleNeigh(NeighMessage neighReply) {
         // TODO might need to ACK sender
 
+        GnuNodeInfo newNeighInfo = new GnuNodeInfo(neighReply.getId(), neighReply.getNeighbors(),
+                neighReply.getCapacity(), neighReply.getAddr(), neighReply.getBloomFilter());
         if (this.neighbors.size() < this.maxNeigh) {
-            this.neighbors.put(neighReply.getId(),
-                    new GnuNodeInfo(neighReply.getId(), neighReply.getNeighbors(), neighReply.getCapacity(), neighReply.getAddr()));
+            this.neighbors.put(neighReply.getId(), newNeighInfo);
             return;
         }
 
@@ -487,8 +484,7 @@ public class GnuNode implements Runnable {
             }
 
             // we can temporarily go over the neighbor limit
-            this.neighbors.put(neighReply.getId(),
-                    new GnuNodeInfo(neighReply.getId(), neighReply.getNeighbors(), neighReply.getCapacity(), neighReply.getAddr()));
+            this.neighbors.put(neighReply.getId(), newNeighInfo);
             if (reply.getCmd() == GnuNodeCMD.DROPOK) {
                 this.neighbors.remove(maxEntry.getKey());
             }
@@ -520,7 +516,7 @@ public class GnuNode implements Runnable {
 
         double satLevel = 0;
         for (GnuNodeInfo neigh : this.neighbors.values()) {
-            satLevel += ((float)neigh.capacity / neigh.nNeighbors);
+            satLevel += ((float) neigh.capacity / neigh.nNeighbors);
         }
         satLevel /= this.capacity;
 

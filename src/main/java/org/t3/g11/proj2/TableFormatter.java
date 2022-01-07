@@ -22,7 +22,7 @@ public class TableFormatter {
             String dt = "";
             if (firstLine) {
                 usrname = username;
-                Date d = new Date(Long.parseLong(date) * 1000);
+                Date d = new Date(Long.parseLong(date));
                 DateFormat format = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
                 dt = format.format(d);
             }
