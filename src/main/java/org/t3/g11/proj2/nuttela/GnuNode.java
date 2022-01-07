@@ -238,6 +238,10 @@ public class GnuNode implements Runnable {
             } catch (ClassNotFoundException | IOException exception) {
                 System.err.println("Failed to connect to " + e.getKey());
                 peerNode.setDead();
+                if (peerNode.isDead()) {
+                    // peer is really dead
+                    this.neighbors.remove(e.getKey());
+                }
                 continue;
             }
 
