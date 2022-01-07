@@ -34,4 +34,9 @@ public class GnuMessage implements Serializable {
     public int getPort() {
         return this.addr.getPort();
     }
+
+    @Override
+    public String toString() {
+        return "Message: " + cmd + " " + addr;
+    }
 }

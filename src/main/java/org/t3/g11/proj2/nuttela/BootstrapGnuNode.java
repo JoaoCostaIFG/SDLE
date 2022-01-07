@@ -1,7 +1,5 @@
-package org.t3.g11.proj2.keyserver;
+package org.t3.g11.proj2.nuttela;
 
-import org.t3.g11.proj2.nuttela.GnuNode;
-import org.t3.g11.proj2.nuttela.GnuNodeCMD;
 import org.t3.g11.proj2.nuttela.message.GnuMessage;
 import org.t3.g11.proj2.nuttela.message.QueryHitMessage;
 import org.t3.g11.proj2.nuttela.message.QueryMessage;
@@ -17,7 +15,7 @@ public class BootstrapGnuNode extends GnuNode {
 
     public BootstrapGnuNode() throws IOException {
         super(null, BootstrapGnuNode.BOOTSTRAPID, BootstrapGnuNode.NODEENDPOINT,
-                BootstrapGnuNode.MAX_NEIGH);
+                BootstrapGnuNode.MAX_NEIGH, 1);
     }
 
     @Override
