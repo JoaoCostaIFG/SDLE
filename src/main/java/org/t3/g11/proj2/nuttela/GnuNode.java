@@ -20,7 +20,7 @@ import java.util.concurrent.*;
 public class GnuNode implements Runnable {
     public static final int RECEIVETIMEOUT = 5000;
     public static final int PING_FREQ = 5;
-    public static final int DROP_DEAD_FREQ = 10;
+    public static final int DROP_DEAD_FREQ = 10; //To only drop neighbors after 2 failed pings
     public static final int MAX_NEIGH = 2;
     public static final int HYSTERESIS_FACTOR = 1;
 
@@ -264,7 +264,7 @@ public class GnuNode implements Runnable {
         pingScheduler.scheduleAtFixedRate(this::ping, 1, PING_FREQ, TimeUnit.SECONDS);
 
         ScheduledExecutorService dropDeadHostsScheduler = Executors.newSingleThreadScheduledExecutor();
-        dropDeadHostsScheduler.scheduleAtFixedRate(this::dropDeadHosts, 2, DROP_DEAD_FREQ, TimeUnit.SECONDS);
+        dropDeadHostsScheduler.scheduleAtFixedRate(this::dropDeadHosts, 12, DROP_DEAD_FREQ, TimeUnit.SECONDS);
 
         while (!Thread.currentThread().isInterrupted()) {
             Socket reqSocket;
