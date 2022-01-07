@@ -1,4 +1,4 @@
-package org.t3.g11.proj2;
+package org.t3.g11.proj2.peer.ui;
 
 import java.sql.Date;
 import java.text.DateFormat;

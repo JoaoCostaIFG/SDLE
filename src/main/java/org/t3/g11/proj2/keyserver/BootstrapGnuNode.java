@@ -16,7 +16,8 @@ public class BootstrapGnuNode extends GnuNode {
     public static final int MAX_NEIGH = 50;
 
     public BootstrapGnuNode() throws IOException {
-        super(null, BootstrapGnuNode.BOOTSTRAPID, BootstrapGnuNode.NODEENDPOINT, BootstrapGnuNode.MAX_NEIGH);
+        super(null, BootstrapGnuNode.BOOTSTRAPID, BootstrapGnuNode.NODEENDPOINT,
+                BootstrapGnuNode.MAX_NEIGH);
     }
 
     @Override

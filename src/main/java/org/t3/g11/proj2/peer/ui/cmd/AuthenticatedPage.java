@@ -1,6 +1,6 @@
 package org.t3.g11.proj2.peer.ui.cmd;
 
-import org.t3.g11.proj2.TableFormatter;
+import org.t3.g11.proj2.peer.ui.TableFormatter;
 import org.t3.g11.proj2.peer.Peer;
 
 import java.nio.charset.StandardCharsets;

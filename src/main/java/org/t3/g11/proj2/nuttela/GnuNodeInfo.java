@@ -7,9 +7,12 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
 public class GnuNodeInfo {
-    public static final int DEAD = 0;
+    public static final int DEAD = -1;
+    public static final int MAYBE_DEAD = 0;
     public static final int ALIVE = 1;
     public static final int DETERMINING = 2;
+
+    public static final int BLOOMSIZE = 500;
     public static final float BLOOMMISSCHANCE = 0.01f;
 
     public int id;
@@ -17,7 +20,7 @@ public class GnuNodeInfo {
     public int capacity;
     public InetSocketAddress address;
     public BloomFilter<String> bloomFilter;
-    public int state; // 0 - dead; 1 - alive; 2 - determining;
+    public int state; // -1 - dead; 0 - maybe dead; 1 - alive; 2 - determining;
 
     public GnuNodeInfo(int id, int nNeighbors, int capacity, InetSocketAddress address, BloomFilter<String> bloomFilter) {
         this.id = id;
@@ -38,12 +41,19 @@ public class GnuNodeInfo {
         return this.id;
     }
 
+    public boolean maybeDead() {
+        return this.state == GnuNodeInfo.MAYBE_DEAD;
+    }
+
     public boolean isDead() {
         return this.state == GnuNodeInfo.DEAD;
     }
 
     public void setDead() {
-        this.state = GnuNodeInfo.DEAD;
+        if(this.state == GnuNodeInfo.DETERMINING)
+            this.state = GnuNodeInfo.MAYBE_DEAD;
+        else
+            this.state = GnuNodeInfo.DEAD;
     }
 
     public void setAlive() {
@@ -51,7 +61,7 @@ public class GnuNodeInfo {
     }
 
     public void setDetermining() {
-        this.state = GnuNodeInfo.DETERMINING;
+        if (this.state == GnuNodeInfo.ALIVE) this.state = GnuNodeInfo.DETERMINING;
     }
 
     public InetAddress getInetAddr() {

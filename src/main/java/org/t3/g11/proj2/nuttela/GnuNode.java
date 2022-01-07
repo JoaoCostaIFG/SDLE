@@ -13,18 +13,15 @@ import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.*;
 
 public class GnuNode implements Runnable {
     public static final int RECEIVETIMEOUT = 5000;
     public static final int PING_FREQ = 5;
-    public static final int CHECK_TOPOLOGY_FREQ = 5;
-    public static final int DROP_DEAD_FREQ = 10; //To only drop neighbors after 2 failed pings
+    public static final int MAX_TOPOLOGY_FREQ = 5;
+    public static final int TOPOLOGY_AGGRESSIVENESS = 1;
     public static final int MIN_NEIGH = 1;
     public static final int MAX_NEIGH = 2;
     public static final int HYSTERESIS_FACTOR = 1;
@@ -33,7 +30,7 @@ public class GnuNode implements Runnable {
 
     protected final ConcurrentHashMap<Integer, Set<Integer>> sentTo; // guid => neighbors
     protected final ConcurrentHashMap<Integer, GnuNodeInfo> neighbors;
-    protected final CopyOnWriteArraySet<InetSocketAddress> hostsCache;
+    protected final CopyOnWriteArraySet<HostsCacheInfo> hostsCache;
 
     protected final InetSocketAddress addr;
     protected final int capacity;
@@ -43,17 +40,15 @@ public class GnuNode implements Runnable {
     protected final ServerSocket serverSocket;
     protected final Peer peer;
     protected final int maxNeigh;
-    protected final BloomFilter<String> bloomFilter;
+
+    protected BloomFilter<String> bloomFilter;
 
     public GnuNode(Peer peer, int id, InetSocketAddress addr, int maxNeigh) throws IOException {
         this.peer = peer;
         this.id = id; // TODO hash username
         this.addr = addr;
         this.maxNeigh = maxNeigh;
-        this.bloomFilter = BloomFilter.create(
-                Funnels.stringFunnel(StandardCharsets.UTF_8),
-                this.maxNeigh * 2,
-                GnuNodeInfo.BLOOMMISSCHANCE);
+        this.buildBloom(Collections.emptySet());
 
         this.neighbors = new ConcurrentHashMap<>();
         this.sentTo = new ConcurrentHashMap<>();
@@ -68,8 +63,18 @@ public class GnuNode implements Runnable {
         this.serverSocket = new ServerSocket(this.addr.getPort(), 100, this.addr.getAddress());
     }
 
-    public GnuNode(Peer peer, int id, String address, int port) throws IOException {
-        this(peer, id, new InetSocketAddress(address, port), GnuNode.MAX_NEIGH);
+    public void addToBloom(String newEntry) {
+        this.bloomFilter.put(newEntry);
+    }
+
+    public void buildBloom(Set<String> subs) {
+        BloomFilter<String> newBloom = BloomFilter.create(
+                Funnels.stringFunnel(StandardCharsets.UTF_8),
+                GnuNodeInfo.BLOOMSIZE, GnuNodeInfo.BLOOMMISSCHANCE);
+        for (String s : subs) {
+            newBloom.put(s);
+        }
+        this.bloomFilter = newBloom;
     }
 
     protected void bootstrap(InetSocketAddress bootstrapEndPoint) {
@@ -77,7 +82,7 @@ public class GnuNode implements Runnable {
     }
 
     protected void bootstrap() {
-        this.pickNeighborToDrop(BootstrapGnuNode.NODEENDPOINT);
+        this.bootstrap(BootstrapGnuNode.NODEENDPOINT);
     }
 
     protected void dropNeigh(GnuNodeInfo toDrop) {
@@ -99,6 +104,7 @@ public class GnuNode implements Runnable {
     }
 
     /**
+     * Returns true if connection w
      * --->> NumNeigh
      * <<--- MyNeigh
      * --->> Neigh
@@ -127,7 +133,7 @@ public class GnuNode implements Runnable {
                     .filter(e -> e.getValue().capacity < reply.getCapacity()).toList();
             if (dropCandidates.isEmpty()) { // reject Y
                 oss.writeObject(new NeighMessage(this.addr, this.id, -1, this.capacity, this.bloomFilter));
-                return false;
+                return true;
             }
             GnuNodeInfo toDrop =
                     Collections.max(dropCandidates, Comparator.comparingInt(e -> e.getValue().nNeighbors)).getValue();
@@ -146,7 +152,7 @@ public class GnuNode implements Runnable {
 
             // otherwise just reject Y
             oss.writeObject(new NeighMessage(this.addr, this.id, -1, this.capacity, null));
-            return false;
+            return true;
         } catch (ClassNotFoundException | IOException e) {
             System.err.println("Failed to connect to endpoint for neigh!");
             e.printStackTrace();
@@ -178,7 +184,7 @@ public class GnuNode implements Runnable {
                 if (!neighSentTo.add(neighId)) continue;
 
                 // TODO tick thingy
-                if (neighInfo.isDead()) continue;
+                if (neighInfo.maybeDead()) continue;
                 try (Socket sendSkt = new Socket(neighInfo.getInetAddr(), neighInfo.getPort())) {
                     ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
                     oss.writeObject(qm);
@@ -213,7 +219,7 @@ public class GnuNode implements Runnable {
 
         for (Map.Entry<Integer, GnuNodeInfo> e : this.neighbors.entrySet()) {
             GnuNodeInfo peerNode = e.getValue();
-            if (peerNode.state == 1)
+            if (peerNode.state == GnuNodeInfo.ALIVE)
                 peerNode.setDetermining();
 
             // we will determine their state now
@@ -244,21 +250,61 @@ public class GnuNode implements Runnable {
         }
     }
 
+    protected double getSatisfaction() {
+        if (this.neighbors.size() < MIN_NEIGH) return 0;
+
+        double satLevel = 0;
+        for (GnuNodeInfo neigh : this.neighbors.values()) {
+            satLevel += ((float) neigh.capacity / neigh.nNeighbors);
+        }
+        satLevel /= this.capacity;
+
+        if (satLevel > 1.0 || this.neighbors.size() >= MAX_NEIGH)
+            return 1;
+
+        return satLevel;
+    }
+
+    private void dropDeadHosts() {
+        List<Integer> toDrop = new ArrayList<>();
+        for (Map.Entry<Integer, GnuNodeInfo> entry : this.neighbors.entrySet()) {
+            if (entry.getValue().isDead()) {
+                toDrop.add(entry.getKey());
+            }
+        }
+
+        for (Integer drop : toDrop) {
+            this.neighbors.remove(drop);
+        }
+    }
+
     protected void checkTopology() {
+        System.out.println("Starting check topology");
+        this.dropDeadHosts(); // cleanup host ca
         double satisfaction = this.getSatisfaction();
         if (satisfaction < 1.0) {
             this.addNewNeighs();
         }
-
         // schedule next topology check with new delay according to satisfaction level
-        int delay = (int) (CHECK_TOPOLOGY_FREQ * satisfaction);
-        this.checkTopologyScheduler.schedule(this::checkTopology, delay, TimeUnit.SECONDS);
+        long delay = Math.round((MAX_TOPOLOGY_FREQ * Math.pow(TOPOLOGY_AGGRESSIVENESS, satisfaction - 1)) * 1000);
+        this.checkTopologyScheduler.schedule(this::checkTopology, delay, TimeUnit.MILLISECONDS);
     }
 
     protected void addNewNeighs() {
-        for (InetSocketAddress newNeighbor : this.hostsCache) {
-            this.pickNeighborToDrop(newNeighbor);
+        Set<InetSocketAddress> neighborsAdrr = new HashSet<>();
+        for (GnuNodeInfo ni : this.neighbors.values())
+            neighborsAdrr.add(ni.getAddr());
+        List<HostsCacheInfo> possibleNeighbors =
+                this.hostsCache.stream().filter(x -> !neighborsAdrr.contains(x.address)).toList();
+        Collections.shuffle(possibleNeighbors);
+        possibleNeighbors = possibleNeighbors.subList(0, 10);
+        System.out.println(possibleNeighbors);
+        HostsCacheInfo highestCap = Collections.max(possibleNeighbors, Comparator.comparingInt(e -> (e.capacity)));
+        if (highestCap.capacity < this.capacity) {
+            Random rand = new Random();
+            highestCap = possibleNeighbors.get(rand.nextInt(possibleNeighbors.size()));
         }
+        this.pickNeighborToDrop(highestCap.address);
     }
 
     /**
@@ -272,10 +318,7 @@ public class GnuNode implements Runnable {
         // schedule pings
         ScheduledExecutorService pingScheduler = Executors.newSingleThreadScheduledExecutor();
         pingScheduler.scheduleAtFixedRate(this::ping, 1, PING_FREQ, TimeUnit.SECONDS);
-
-        ScheduledExecutorService dropDeadHostsScheduler = Executors.newSingleThreadScheduledExecutor();
-        dropDeadHostsScheduler.scheduleAtFixedRate(this::dropDeadHosts, 12, DROP_DEAD_FREQ, TimeUnit.SECONDS);
-
+        // schedule topology adaptation
         this.checkTopologyScheduler.schedule(this::checkTopology, 5, TimeUnit.SECONDS);
 
         while (!Thread.currentThread().isInterrupted()) {
@@ -293,20 +336,6 @@ public class GnuNode implements Runnable {
         }
 
         pingScheduler.shutdownNow();
-    }
-
-    private void dropDeadHosts() {
-        List<Integer> toDrop = new ArrayList<>();
-        for (Map.Entry<Integer, GnuNodeInfo> entry : this.neighbors.entrySet()) {
-            if (entry.getValue().state == 0) {
-                toDrop.add(entry.getKey());
-            }
-        }
-
-        for (Integer drop : toDrop) {
-            this.hostsCache.remove(this.neighbors.get(drop).getAddr());
-            this.neighbors.remove(drop);
-        }
     }
 
     public void handleMessage(ObjectInputStream ois, ObjectOutputStream oos) {
@@ -395,10 +424,11 @@ public class GnuNode implements Runnable {
      */
     protected void handlePing(ObjectOutputStream oos, GnuMessage reqMsg) {
         // craft reply
-        List<InetSocketAddress> addresses = new ArrayList<>(List.of(this.addr));
+        List<HostsCacheInfo> addresses = new ArrayList<>(List.of(new HostsCacheInfo(true, this.addr, this.capacity)));
         for (Map.Entry<Integer, GnuNodeInfo> entry : this.neighbors.entrySet()) {
             InetSocketAddress eAddr = entry.getValue().address;
-            if (!reqMsg.getAddr().equals(eAddr)) addresses.add(eAddr);
+            if (!reqMsg.getAddr().equals(eAddr))
+                addresses.add(new HostsCacheInfo(!entry.getValue().isDead(), entry.getValue().address, entry.getValue().capacity));
         }
         // reply to the same socket
         GnuMessage pongMsg = new PongMessage(this.addr, addresses, this.capacity, this.bloomFilter);
@@ -509,20 +539,5 @@ public class GnuNode implements Runnable {
         } catch (IOException e) {
             System.err.println("DROP handling failed.");
         }
-    }
-
-    protected double getSatisfaction() {
-        if (this.neighbors.size() < MIN_NEIGH) return 0;
-
-        double satLevel = 0;
-        for (GnuNodeInfo neigh : this.neighbors.values()) {
-            satLevel += ((float) neigh.capacity / neigh.nNeighbors);
-        }
-        satLevel /= this.capacity;
-
-        if (satLevel > 1.0 || this.neighbors.size() >= MAX_NEIGH)
-            return 1;
-
-        return satLevel;
     }
 }

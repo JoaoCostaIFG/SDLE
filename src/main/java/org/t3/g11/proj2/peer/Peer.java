@@ -13,6 +13,7 @@ import org.zeromq.ZMsg;
 import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
@@ -49,7 +50,8 @@ public class Peer {
         this.keyHolder = new KeyHolder(KeyServer.KEYINSTANCE, KeyServer.KEYSIZE);
 
         // TODO unfortunate double reference
-        this.node = new GnuNode(this, id, address, port);
+        this.node = new GnuNode(this, id, new InetSocketAddress(address, port),
+                GnuNode.MAX_NEIGH);
         this.nodeT = new Thread(this.node);
     }
 
@@ -57,7 +59,16 @@ public class Peer {
         return peerData;
     }
 
+    /**
+     * Called when authenticated (register/login).
+     */
     public void startNode() {
+        try {
+            this.node.buildBloom(this.peerData.getSubs());
+        } catch (SQLException throwables) {
+            System.out.println("Problem getting subscriptions");
+            throwables.printStackTrace();
+        }
         this.nodeT.start();
         // TODO make data member
         ScheduledExecutorService queryScheduler = Executors.newSingleThreadScheduledExecutor();
@@ -188,9 +199,6 @@ public class Peer {
         }
 
         try {
-//            System.out.println(ciphered);
-//            System.out.println(ciphered.length());
-//            System.out.println(Arrays.toString(ciphered.getBytes()));
             this.peerData.addPostSelf(content, ciphered);
         } catch (SQLException throwables) {
             System.err.println(throwables.getMessage());
@@ -207,7 +215,6 @@ public class Peer {
             return null;
         }
     }
-
 
     private PublicKey getUserKey(String username) {
         // fetch from cache
@@ -244,11 +251,15 @@ public class Peer {
         PublicKey publicKey = this.lookup(username);
         if (publicKey == null) throw new Exception("User " + username + " not found.");
         this.peerData.addUser(username, KeyHolder.encodeKey(publicKey));
+        // update node bloom filter
+        this.node.addToBloom(username);
     }
 
     public void unsubscribe(String username) throws Exception {
         if (this.peerData.getSelfUsername().equals(username)) throw new Exception("Can't subscribe to self.");
         this.peerData.removeUser(username);
+        // update node bloom filter
+        this.node.buildBloom(this.peerData.getSubs());
     }
 
     public Set<String> getSubs() {
