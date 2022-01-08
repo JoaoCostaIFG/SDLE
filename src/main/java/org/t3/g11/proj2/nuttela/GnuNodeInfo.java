@@ -50,7 +50,7 @@ public class GnuNodeInfo {
     }
 
     public void setDead() {
-        if(this.state == GnuNodeInfo.DETERMINING)
+        if (this.state == GnuNodeInfo.DETERMINING)
             this.state = GnuNodeInfo.MAYBE_DEAD;
         else
             this.state = GnuNodeInfo.DEAD;

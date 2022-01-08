@@ -30,13 +30,11 @@ public class Peer {
 
     private final ZContext zctx;
     private final ZMQ.Socket ksSocket;
-
-    private PeerData peerData;
-
-    private boolean authenticated;
     private final KeyHolder keyHolder;
     private final GnuNode node;
     private final Thread nodeT;
+    private PeerData peerData;
+    private boolean authenticated;
 
     public Peer(ZContext zctx, int id, String address, int port) throws Exception {
         this.zctx = zctx;

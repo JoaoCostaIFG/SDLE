@@ -73,6 +73,21 @@ public class KeyServer {
         System.out.println("Key server ready!");
     }
 
+    public static void main(String[] args) {
+        ZContext zctx = new ZContext();
+
+        // init server
+        KeyServer keyServer = null;
+        try {
+            keyServer = new KeyServer(zctx);
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.err.println("Database file reading failed.");
+        }
+
+        keyServer.serverLoop();
+    }
+
     public void serverLoop() {
         this.gnuNodeThread.start();
 
@@ -134,20 +149,5 @@ public class KeyServer {
             //SQLiteErrorCode.SQLITE_CONSTRAINT_UNIQUE;
             return null;
         }
-    }
-
-    public static void main(String[] args) {
-        ZContext zctx = new ZContext();
-
-        // init server
-        KeyServer keyServer = null;
-        try {
-            keyServer = new KeyServer(zctx);
-        } catch (Exception e) {
-            e.printStackTrace();
-            System.err.println("Database file reading failed.");
-        }
-
-        keyServer.serverLoop();
     }
 }

@@ -29,6 +29,24 @@ public class KeyHolder {
         this.cipher = Cipher.getInstance(keyInstance);
     }
 
+    public static void writeKeyToFile(PrivateKey key, String username) throws IOException {
+        byte[] encoded = key.getEncoded();
+        FileOutputStream keyfos = new FileOutputStream(username + ".priv");
+        keyfos.write(encoded);
+        keyfos.close();
+    }
+
+    public static void writeKeyToFile(PublicKey key, String username) throws IOException {
+        byte[] encoded = key.getEncoded();
+        FileOutputStream keyfos = new FileOutputStream(username + ".pub");
+        keyfos.write(encoded);
+        keyfos.close();
+    }
+
+    public static String encodeKey(Key key) {
+        return Base64.getEncoder().encodeToString(key.getEncoded());
+    }
+
     public KeyPair generateKeyPair() throws NoSuchAlgorithmException {
         SecureRandom secureRandom = SecureRandom.getInstanceStrong();
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(this.keyInstance);
@@ -123,23 +141,5 @@ public class KeyHolder {
         byte[] pubKeyBuf = keyfis.readAllBytes();
         keyfis.close();
         this.publicKey = this.genPubKey(pubKeyBuf);
-    }
-
-    public static void writeKeyToFile(PrivateKey key, String username) throws IOException {
-        byte[] encoded = key.getEncoded();
-        FileOutputStream keyfos = new FileOutputStream(username + ".priv");
-        keyfos.write(encoded);
-        keyfos.close();
-    }
-
-    public static void writeKeyToFile(PublicKey key, String username) throws IOException {
-        byte[] encoded = key.getEncoded();
-        FileOutputStream keyfos = new FileOutputStream(username + ".pub");
-        keyfos.write(encoded);
-        keyfos.close();
-    }
-
-    public static String encodeKey(Key key) {
-        return Base64.getEncoder().encodeToString(key.getEncoded());
     }
 }

@@ -85,10 +85,8 @@ public class PeerData {
         try {
             pstmt.executeUpdate();
         } catch (SQLException throwables) {
-            // ignore exception on duplicated posts
-            // TODO tirar isto daqui
-            System.err.println(throwables.getErrorCode() + " " + SQLiteErrorCode.SQLITE_CONSTRAINT_PRIMARYKEY.code + " " + throwables.getMessage());
-            if (throwables.getErrorCode() != SQLiteErrorCode.SQLITE_CONSTRAINT_PRIMARYKEY.code) {
+            // ignore exception on duplicated posts <3
+            if (throwables.getErrorCode() != SQLiteErrorCode.SQLITE_CONSTRAINT.code) {
                 throw throwables;
             }
         }

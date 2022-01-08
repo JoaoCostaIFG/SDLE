@@ -20,7 +20,7 @@ public class BootstrapGnuNode extends GnuNode {
     }
 
     @Override
-    protected double getSatisfaction(){
+    protected double getSatisfaction() {
         return 1.0;
     }
 
@@ -30,17 +30,8 @@ public class BootstrapGnuNode extends GnuNode {
     }
 
     @Override
-    protected void handleQuery(ObjectOutputStream oos, QueryMessage reqMsg) {
-        // never gets a hit
-        try {
-            GnuMessage ackMsg = GnuNodeCMD.ACK.getMessage(this.addr);
-            oos.writeObject(ackMsg);
-        } catch (Exception e) {
-            System.err.println("Couldn't connect to query relayer peer");
-            e.printStackTrace();
-            return;
-        }
-
+    protected void handleQuery(QueryMessage reqMsg) {
+        // never gets a hit => just forward it if needed
         if (!this.sentTo.containsKey(reqMsg.getGuid()))
             this.sentTo.put(reqMsg.getGuid(), new HashSet<>());
         this.sentTo.get(reqMsg.getGuid()).add(reqMsg.getId());
