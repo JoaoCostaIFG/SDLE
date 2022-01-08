@@ -8,7 +8,7 @@ import javax.swing.*;
 
 public class SwingInterface implements PeerInterface {
 
-    private Peer peer;
+    public final Peer peer;
 
     public SwingInterface(Peer peer) {
         this.peer = peer;
@@ -20,7 +20,7 @@ public class SwingInterface implements PeerInterface {
         SwingUtilities.invokeLater(() -> {
             FlatDarkLaf.setup();
 
-            MainFrame mf = new MainFrame();
+            MainFrame mf = new MainFrame(this);
         });
     }
 }

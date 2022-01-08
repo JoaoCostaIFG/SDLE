@@ -1,72 +1,127 @@
 package org.t3.g11.proj2.peer.ui.swing;
 
+import com.sun.tools.jconsole.JConsoleContext;
 import net.miginfocom.swing.MigLayout;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 
 public class MainFrame extends JFrame {
 
-    public MainFrame() {
+    private final SwingInterface swi;
+
+    public MainFrame(SwingInterface swi) {
         super();
+
+        this.swi = swi;
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setTitle("Molater");
 
-        setSize(400,500);//400 width and 500 height
+//        setMinimumSize(new Dimension(500, 700));
 
         Toolkit toolKit = getToolkit();
         Dimension size = toolKit.getScreenSize();
         setLocation(size.width/2 - getWidth()/2, size.height/2 - getHeight()/2);
 
         // add components and stuff
-//        add(this.basePanel());
-        add(this.form());
+        add(this.basePanel());
+//        add(this.form());
 
         pack();
         setVisible(true);//making the frame visible
     }
 
     private JPanel basePanel() {
-        MigLayout layout = new MigLayout("fillx", "[right]rel[grow,fill]", "[]10[]");
+        MigLayout layout = new MigLayout("insets 20");
         JPanel panel = new JPanel(layout);
 
-        panel.add(new JLabel("Enter size:"),   "");
-        panel.add(new JTextField(""),          "wrap");
-        panel.add(new JLabel("Enter weight:"), "");
-        panel.add(new JTextField(""),          "");
-
-        return panel;
-    }
-
-    private JPanel form() {
-        MigLayout layout = new MigLayout("");
-        JPanel panel = new JPanel(layout);
-
-        JLabel title = new JLabel("Registration Form", JLabel.CENTER);
-//        title.setOpaque(true);
-//        title.setBackground(Color.black);
-//        title.setForeground(Color.white);
+        JLabel title = new JLabel("Welcome to Molater", JLabel.CENTER);
         title.setPreferredSize(new Dimension(1, 27));
 
         panel.add(title, "span, wrap 15, growx");
-        panel.add(new JLabel("Name"), "al right");
-        panel.add(createTextField(), "wrap, pushx, growx");
-        panel.add(new JLabel("Phone"), "al right");
-        panel.add(createTextField(), "wrap, pushx, growx");
-        panel.add(new JLabel("DOB"), "al right");
-        panel.add(new JComboBox<>(new String[]{"1989"}), "split 3");
-        panel.add(new JComboBox<>(new String[]{"01"}));
-        panel.add(new JComboBox<>(new String[]{"01"}), "wrap");
-        panel.add(new JLabel("Address"), "al right");
-        panel.add(new JScrollPane(new JTextArea(3, 10)), "wrap, pushx, growx");
-        panel.add(new JLabel("Resume"), "al right");
-        panel.add(createTextField(), "pushx, growx, split 2");
-        panel.add(new JButton("..."), "wrap 10");
-        panel.add(new JLabel(""));
-        panel.add(new JButton("Register"));
 
-        panel.setPreferredSize(new Dimension(350, 300));
+        panel.add(new JLabel("Username"),   "span, wrap");
+        JTextField username = createTextField();
+        panel.add(username, "span, wrap, pushx, growx");
+
+        JLabel warningText = new JLabel("Error message here");
+        warningText.setForeground(Color.red);
+        warningText.setVisible(false);
+        panel.add(warningText, "span, wrap");
+
+        JButton registerButton = new JButton("Register");
+        JButton loginButton = new JButton("Login");
+
+        registerButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                String user = username.getText().trim();
+                if (user.isEmpty()) {
+                    warningText.setText("Username must not be empty");
+                    warningText.setVisible(true);
+
+                    username.setText("");
+
+                    pack();
+                    return;
+                }
+
+                registerButton.setEnabled(false);
+                loginButton.setEnabled(false);
+
+                if (swi.peer.register(user)) {
+                    System.out.println("hell yeah brotha");
+                } else {
+                    warningText.setText("Username already exists");
+                    warningText.setVisible(true);
+
+                    username.setText("");
+
+                    registerButton.setEnabled(true);
+                    loginButton.setEnabled(true);
+
+                    pack();
+                }
+            }
+        });
+        panel.add(registerButton, "gaptop 10");
+
+        loginButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                String user = username.getText().trim();
+                if (user.isEmpty()) {
+                    warningText.setText("Username must not be empty");
+                    warningText.setVisible(true);
+
+                    username.setText("");
+
+                    pack();
+                    return;
+                }
+
+                registerButton.setEnabled(false);
+                loginButton.setEnabled(false);
+
+                if (swi.peer.authenticate(user)) {
+                    System.out.println("hell yeah brotha");
+                } else {
+                    warningText.setText("Failed to load " + user + "'s key or database");
+                    warningText.setVisible(true);
+
+                    username.setText("");
+
+                    registerButton.setEnabled(true);
+                    loginButton.setEnabled(true);
+
+                    pack();
+                }
+            }
+        });
+        panel.add(new JButton("Login"), "gapleft 30");
 
         return panel;
     }
