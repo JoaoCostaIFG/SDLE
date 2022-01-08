@@ -5,14 +5,14 @@ import org.t3.g11.proj2.nuttela.GnuNodeCMD;
 import java.net.InetSocketAddress;
 
 public class NumNeighMessage extends GnuMessage {
-    private int n_neighbors;
+    private final int nNeighbors;
 
     public NumNeighMessage(InetSocketAddress addr, int n_neighbors) {
         super(GnuNodeCMD.NUMNEIGH, addr);
-        this.n_neighbors = n_neighbors;
+        this.nNeighbors = n_neighbors;
     }
 
     public int getNeighbors() {
-        return this.n_neighbors;
+        return this.nNeighbors;
     }
 }

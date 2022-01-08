@@ -7,6 +7,7 @@ import org.t3.g11.proj2.nuttela.message.QueryMessage;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
+import java.util.HashSet;
 
 public class BootstrapGnuNode extends GnuNode {
     public static final int BOOTSTRAPID = 0;
@@ -19,12 +20,18 @@ public class BootstrapGnuNode extends GnuNode {
     }
 
     @Override
+    protected double getSatisfaction(){
+        return 1.0;
+    }
+
+    @Override
     protected void bootstrap() {
         // do nothing
     }
 
     @Override
     protected void handleQuery(ObjectOutputStream oos, QueryMessage reqMsg) {
+        // never gets a hit
         try {
             GnuMessage ackMsg = GnuNodeCMD.ACK.getMessage(this.addr);
             oos.writeObject(ackMsg);
@@ -34,7 +41,10 @@ public class BootstrapGnuNode extends GnuNode {
             return;
         }
 
-        if (reqMsg.decreaseTtl() != 0) {
+        if (!this.sentTo.containsKey(reqMsg.getGuid()))
+            this.sentTo.put(reqMsg.getGuid(), new HashSet<>());
+        this.sentTo.get(reqMsg.getGuid()).add(reqMsg.getId());
+        if (reqMsg.decreaseTtl() > 0) {
             reqMsg.setAddr(this.addr); // update source address
             this.query(reqMsg);
         }

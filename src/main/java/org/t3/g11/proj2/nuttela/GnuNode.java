@@ -41,6 +41,7 @@ public class GnuNode implements Runnable {
     protected final int maxNeigh;
 
     protected BloomFilter<String> bloomFilter;
+    private int bloomFilterCapacity = GnuNodeInfo.BLOOMSIZE;
 
     public GnuNode(Peer peer, int id, InetSocketAddress addr, int maxNeigh, int capacity) throws IOException {
         this.peer = peer;
@@ -49,6 +50,7 @@ public class GnuNode implements Runnable {
         this.maxNeigh = maxNeigh;
         this.capacity = capacity;
 
+        // should be wrapped to grow
         this.buildBloom(Collections.emptySet());
         this.neighbors = new ConcurrentHashMap<>();
         this.sentTo = new ConcurrentHashMap<>();
@@ -68,12 +70,27 @@ public class GnuNode implements Runnable {
 
     public void addToBloom(String newEntry) {
         this.bloomFilter.put(newEntry);
+
+        synchronized (this) {
+            if (this.bloomFilter.approximateElementCount() > this.bloomFilterCapacity) {
+                // needs to grow
+                this.bloomFilterCapacity *= 2;
+
+                BloomFilter<String> biggerFilter = BloomFilter.create(
+                        Funnels.stringFunnel(StandardCharsets.UTF_8),
+                        this.bloomFilterCapacity, GnuNodeInfo.BLOOMMISSCHANCE
+                );
+
+                biggerFilter.putAll(this.bloomFilter);
+                this.bloomFilter = biggerFilter;
+            }
+        }
     }
 
     public void buildBloom(Set<String> subs) {
         BloomFilter<String> newBloom = BloomFilter.create(
                 Funnels.stringFunnel(StandardCharsets.UTF_8),
-                GnuNodeInfo.BLOOMSIZE, GnuNodeInfo.BLOOMMISSCHANCE);
+                this.bloomFilterCapacity, GnuNodeInfo.BLOOMMISSCHANCE);
         for (String s : subs) {
             newBloom.put(s);
         }
@@ -189,7 +206,6 @@ public class GnuNode implements Runnable {
                 // if already sent
                 if (!neighSentTo.add(neighId)) continue;
 
-                // TODO tick thingy
                 if (neighInfo.maybeDead()) continue;
                 try (Socket sendSkt = new Socket(neighInfo.getInetAddr(), neighInfo.getPort())) {
                     ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
@@ -208,20 +224,25 @@ public class GnuNode implements Runnable {
     }
 
     public void query(String sub) {
-        this.query(new QueryMessage(this.addr, this.id, this.addr, sub));
+        this.query(new QueryMessage(this.addr, this.id, new Query(this.addr, this.id, sub)));
+    }
+
+    public void query(String sub, long latestDate) {
+        this.query(new QueryMessage(this.addr, this.id, new Query(this.addr, this.id, sub, latestDate)));
     }
 
     /**
      * --->> Ping
      * <<--- Pong
      */
-    // TODO: PONG caching
     protected void ping() {
-        // TODO DEBUG purposes
+        // TODO DEBUG debug purposes
+        /*
         System.out.println("Neighboors:");
         for (Map.Entry<Integer, GnuNodeInfo> neigh : this.neighbors.entrySet()) {
             System.out.println("\t" + neigh.getKey() + " - " + neigh.getValue().state);
         }
+         */
 
         for (Map.Entry<Integer, GnuNodeInfo> e : this.neighbors.entrySet()) {
             GnuNodeInfo peerNode = e.getValue();
@@ -283,7 +304,7 @@ public class GnuNode implements Runnable {
 
     protected void checkTopology() {
         try {
-            System.out.println("Starting check topology");
+            //System.out.println("Starting check topology");
             // clean up host caches
             this.hostsCache.removeIf(x -> !x.isAlive);
             double satisfaction = this.getSatisfaction();
@@ -331,7 +352,6 @@ public class GnuNode implements Runnable {
      */
     @Override
     public void run() {
-        // TODO should this be here?
         this.bootstrap();
 
         // schedule pings
@@ -387,6 +407,7 @@ public class GnuNode implements Runnable {
      * --->> Ack
      */
     protected void handleQuery(ObjectOutputStream oos, QueryMessage reqMsg) {
+        System.out.println("Query: " + reqMsg + " " + reqMsg.getGuid());
         try {
             GnuMessage ackMsg = GnuNodeCMD.ACK.getMessage(this.addr);
             oos.writeObject(ackMsg);
@@ -397,27 +418,38 @@ public class GnuNode implements Runnable {
         }
 
         // TODO this is only searching by username
-        if (reqMsg.getQuery().getQueryString().equals(this.peer.getPeerData().getSelfUsername())) {
-            try (Socket sendSkt = new Socket(reqMsg.getInetAddr(), reqMsg.getPort())) {
-                ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
-
-                List<Result> results = new ArrayList<>();
-                for (HashMap<String, String> post : this.peer.getSelfPeerPosts()) {
-                    results.add(new Result(Integer.parseInt(post.get("guid")), Long.parseLong(post.get("timestamp")),
+        Query query = reqMsg.getQuery();
+        if (this.bloomFilter.mightContain(query.getQueryString())) {
+            // gather results
+            List<Result> results = new ArrayList<>();
+            for (HashMap<String, String> post : this.peer.getUserPosts(reqMsg.getQuery().getQueryString())) {
+                if (Long.parseLong(post.get("timestamp")) > reqMsg.getQuery().getLatestDate())
+                    results.add(new Result(Integer.parseInt(post.get("guid")),
+                            Long.parseLong(post.get("timestamp")),
                             post.get("ciphered"), post.get("author")));
+            }
+            if (!results.isEmpty()) {
+                // got a hit
+                try (Socket sendSkt = new Socket(query.getSourceAddr(), query.getSourcePort())) {
+                    ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
+                    QueryHitMessage qhm = new QueryHitMessage(this.addr, reqMsg.getGuid(), results);
+                    oss.writeObject(qhm);
+                } catch (Exception e) {
+                    System.err.println("Couldn't connect to initiator peer");
+                    e.printStackTrace();
                 }
+            }
+        }
 
-                QueryHitMessage qhm = new QueryHitMessage(this.addr, reqMsg.getGuid(), results);
-                oss.writeObject(qhm);
-            } catch (Exception e) {
-                System.err.println("Couldn't connect to initiator peer");
-                e.printStackTrace();
-            }
-        } else {
-            if (reqMsg.decreaseTtl() != 0) {
-                reqMsg.setAddr(this.addr); // update source address
-                this.query(reqMsg);
-            }
+        // didn't get a hit (don't sub or result list is empty)
+        if (!this.sentTo.containsKey(reqMsg.getGuid()))
+            this.sentTo.put(reqMsg.getGuid(), new HashSet<>());
+        this.sentTo.get(reqMsg.getGuid()).add(reqMsg.getId());
+        if (reqMsg.decreaseTtl() > 0) {
+            // update source address and id to relay
+            reqMsg.setAddr(this.addr);
+            reqMsg.setId(this.id);
+            this.query(reqMsg);
         }
     }
 
@@ -425,6 +457,7 @@ public class GnuNode implements Runnable {
      * <<--- QueryHit
      */
     protected void handleQueryHit(QueryHitMessage reqMsg) {
+        System.out.println("Query Hit: " + reqMsg + " " + reqMsg.getGuid());
         List<Result> hitPosts = reqMsg.getResultSet();
         for (Result post : hitPosts) {
             try {
@@ -477,12 +510,12 @@ public class GnuNode implements Runnable {
 
         try {
             if (maxEntry == null || this.neighbors.size() < this.maxNeigh || maxEntry.nNeighbors > msg.getNeighbors() + GnuNode.HYSTERESIS_FACTOR) {
-                reply = new MyNeighMessage(this.addr, this.neighbors.size(),
-                        this.capacity, this.id, this.bloomFilter);
+                reply = new MyNeighMessage(this.addr, this.id, this.neighbors.size(),
+                        this.capacity, this.bloomFilter);
                 oos.writeObject(reply);
 
             } else {
-                reply = new MyNeighMessage(this.addr, -1, this.capacity, this.id, null);
+                reply = new MyNeighMessage(this.addr, this.id, -1, this.capacity, null);
                 oos.writeObject(reply);
                 return;
             }

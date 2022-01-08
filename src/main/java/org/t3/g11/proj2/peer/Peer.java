@@ -65,6 +65,7 @@ public class Peer {
     public void startNode() {
         try {
             this.node.buildBloom(this.peerData.getSubs());
+            this.node.addToBloom(this.peerData.getSelfUsername());
         } catch (SQLException throwables) {
             System.out.println("Problem getting subscriptions");
             throwables.printStackTrace();
@@ -78,7 +79,7 @@ public class Peer {
     public void fetchSubPosts() {
         for (String sub : this.getSubs()) {
             try {
-                this.node.query(sub);
+                this.node.query(sub, this.peerData.getLastUserPostDate(sub));
             } catch (Exception e) {
                 System.err.println("Problem getting info about user: " + sub);
             }
@@ -212,7 +213,7 @@ public class Peer {
             return peerData.getPostsSelf();
         } catch (SQLException throwables) {
             System.err.println(throwables.getMessage());
-            return null;
+            return Collections.emptyList();
         }
     }
 
@@ -260,6 +261,7 @@ public class Peer {
         this.peerData.removeUser(username);
         // update node bloom filter
         this.node.buildBloom(this.peerData.getSubs());
+        this.node.addToBloom(this.peerData.getSelfUsername());
     }
 
     public Set<String> getSubs() {
