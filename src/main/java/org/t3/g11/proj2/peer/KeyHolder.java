@@ -1,5 +1,7 @@
 package org.t3.g11.proj2.peer;
 
+import org.t3.g11.proj2.keyserver.KeyServer;
+
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
@@ -9,6 +11,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.security.*;
 import java.security.spec.InvalidKeySpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 
@@ -95,7 +98,7 @@ public class KeyHolder {
     }
 
     public PrivateKey genPrivKey(byte[] keyBuf) throws InvalidKeySpecException {
-        X509EncodedKeySpec privKeySpec = new X509EncodedKeySpec(keyBuf);
+        PKCS8EncodedKeySpec privKeySpec = new PKCS8EncodedKeySpec(keyBuf);
         return keyFactory.generatePrivate(privKeySpec);
     }
 

@@ -29,12 +29,11 @@ public class CmdInterface implements PeerInterface {
     }
 
     @Override
-    public void setup() {}
-
-    @Override
-    public void clientLoop() {
+    public void setup() {
         while (!this.exit)
             this.pages.peek().show();
+
+        peer.shutdown();
     }
 
     public void exit() {

@@ -4,6 +4,7 @@ import org.t3.g11.proj2.keyserver.KeyServer;
 import org.t3.g11.proj2.keyserver.KeyServerCMD;
 import org.t3.g11.proj2.keyserver.KeyServerReply;
 import org.t3.g11.proj2.message.UnidentifiedMessage;
+import org.t3.g11.proj2.nuttela.GnuNode;
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
@@ -23,12 +24,15 @@ import java.util.*;
 public class Peer {
     private final ZContext zctx;
     private final ZMQ.Socket ksSocket;
-    private final KeyHolder keyHolder;
 
     private PeerData peerData;
-    private boolean authenticated;
 
-    public Peer(ZContext zctx) throws Exception {
+    private boolean authenticated;
+    private final KeyHolder keyHolder;
+    private final GnuNode node;
+    private final Thread nodeT;
+
+    public Peer(ZContext zctx, GnuNode node) throws Exception {
         this.zctx = zctx;
         this.ksSocket = zctx.createSocket(SocketType.REQ);
         if (!this.ksSocket.connect(KeyServer.ENDPOINT)) {
@@ -38,6 +42,13 @@ public class Peer {
 
         this.authenticated = false;
         this.keyHolder = new KeyHolder(KeyServer.KEYINSTANCE, KeyServer.KEYSIZE);
+
+        this.node = node;
+        this.nodeT = new Thread(this.node);
+    }
+
+    public void startNode() {
+        this.nodeT.start();
     }
 
     public boolean register(String username) {
@@ -85,6 +96,7 @@ public class Peer {
                 System.err.println("Failed to create database.");
                 System.exit(1);
             }
+            this.startNode();
             this.authenticated = true;
         } else {
             // failure
@@ -107,7 +119,6 @@ public class Peer {
 
         try {
             this.peerData = new PeerData(username);
-            this.peerData.addUserSelf(KeyHolder.encodeKey(keyHolder.getPublicKey()));
         } catch (SQLException throwables) {
             throwables.printStackTrace();
             System.err.println("Failed to open user database.");
@@ -115,6 +126,7 @@ public class Peer {
             return false;
         }
 
+        this.startNode();
         this.authenticated = true;
         return true;
     }
@@ -160,4 +172,17 @@ public class Peer {
         }
         return true;
     }
+
+    public List<HashMap<String, String>> getSelfPeerPosts() {
+        try {
+            return peerData.getPostsSelf();
+        }catch (SQLException throwables) {
+            System.err.println(throwables.getMessage());
+            return null;
+        }
+    }
+
+    public void shutdown() {
+    }
+
 }

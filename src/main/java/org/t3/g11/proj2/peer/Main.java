@@ -1,5 +1,6 @@
 package org.t3.g11.proj2.peer;
 
+import org.t3.g11.proj2.nuttela.GnuNode;
 import org.t3.g11.proj2.peer.ui.PeerInterface;
 import org.t3.g11.proj2.peer.ui.cmd.CmdInterface;
 import org.t3.g11.proj2.peer.ui.swing.SwingInterface;
@@ -8,37 +9,32 @@ import org.zeromq.ZContext;
 import java.util.Arrays;
 
 public class Main {
-    private final ZContext zctx;
-    private final Peer peer;
-
-    private PeerInterface peerInterface;
-
-    public Main() throws Exception {
-        this.zctx = new ZContext();
-        this.peer = new Peer(this.zctx);
-    }
-
-    public void setInterface(PeerInterface peerInterface) {
-        this.peerInterface = peerInterface;
-    }
 
     public static void main(String[] args) {
-        Main main;
+
+        if (args.length < 2) {
+            System.out.println("Usage: Peer <id> <routerAdd>");
+            return;
+        }
+
+        ZContext zctx = new ZContext();
+        Peer peer;
         try {
-            main = new Main();
+            peer = new Peer(zctx, new GnuNode(zctx, Integer.parseInt(args[0]), args[1]));
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
             return;
         }
 
-        if (!Arrays.asList(args).contains("--gui")) {
-            main.setInterface(new SwingInterface(main.peer));
+
+        PeerInterface peerInterface;
+        if (Arrays.asList(args).contains("--gui")) {
+            peerInterface = new SwingInterface(peer);
         } else {
-            main.setInterface(new CmdInterface(main.peer));
+            peerInterface = new CmdInterface(peer);
         }
 
-        main.peerInterface.setup();
-        main.peerInterface.clientLoop();
+        peerInterface.setup();
     }
 }

@@ -23,9 +23,4 @@ public class SwingInterface implements PeerInterface {
             MainFrame mf = new MainFrame();
         });
     }
-
-
-    @Override
-    public void clientLoop() {
-    }
 }

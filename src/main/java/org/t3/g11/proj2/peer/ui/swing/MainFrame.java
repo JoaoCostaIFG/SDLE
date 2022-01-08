@@ -11,14 +11,13 @@ public class MainFrame extends JFrame {
         super();
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setTitle("Padoru Feed");
+        setTitle("Molater");
 
         setSize(400,500);//400 width and 500 height
 
         Toolkit toolKit = getToolkit();
         Dimension size = toolKit.getScreenSize();
         setLocation(size.width/2 - getWidth()/2, size.height/2 - getHeight()/2);
-
 
         // add components and stuff
 //        add(this.basePanel());
