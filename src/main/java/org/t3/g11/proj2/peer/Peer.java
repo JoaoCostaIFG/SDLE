@@ -5,6 +5,7 @@ import org.t3.g11.proj2.keyserver.KeyServerCMD;
 import org.t3.g11.proj2.keyserver.KeyServerReply;
 import org.t3.g11.proj2.keyserver.message.UnidentifiedMessage;
 import org.t3.g11.proj2.nuttela.GnuNode;
+import org.t3.g11.proj2.nuttela.message.Result;
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
@@ -25,10 +26,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public class Peer {
+public class Peer implements PeerObserver {
     public static final int UPDATE_FREQ = 5;
 
-    private final ZContext zctx;
     private final ZMQ.Socket ksSocket;
     private final KeyHolder keyHolder;
     private final GnuNode node;
@@ -37,7 +37,6 @@ public class Peer {
     private boolean authenticated;
 
     public Peer(ZContext zctx, int id, String address, int port) throws Exception {
-        this.zctx = zctx;
         this.ksSocket = zctx.createSocket(SocketType.REQ);
         if (!this.ksSocket.connect(KeyServer.KEYENDPOINT)) {
             System.err.println("Failed to connect to keyserver.");
@@ -48,8 +47,8 @@ public class Peer {
         this.keyHolder = new KeyHolder(KeyServer.KEYINSTANCE, KeyServer.KEYSIZE);
 
         // TODO unfortunate double reference
-        this.node = new GnuNode(this, id, new InetSocketAddress(address, port),
-                GnuNode.MAX_NEIGH);
+        this.node = new GnuNode(id, new InetSocketAddress(address, port), GnuNode.MAX_NEIGH);
+        this.node.setObserver(this);
         this.nodeT = new Thread(this.node);
     }
 
@@ -77,9 +76,11 @@ public class Peer {
     public void fetchSubPosts() {
         for (String sub : this.getSubs()) {
             try {
-                this.node.query(sub, this.peerData.getLastUserPostDate(sub));
+                // we're okay with 1
+                this.node.query(1, sub, this.peerData.getLastUserPostDate(sub));
             } catch (Exception e) {
                 System.err.println("Problem getting info about user: " + sub);
+                e.printStackTrace();
             }
         }
     }
@@ -286,6 +287,30 @@ public class Peer {
             posts.addAll(this.getUserPosts(usrnm));
         posts.addAll(this.getSelfPeerPosts());
         return posts;
+    }
+
+    @Override
+    public List<Result> getResults(String username, long timestamp) {
+        List<Result> results = new ArrayList<>();
+        var userPosts = this.getUserPosts(username);
+        if (userPosts == null) return results;
+
+        for (HashMap<String, String> post : userPosts) {
+            long postTimestamp = Long.parseLong(post.get("timestamp"));
+            if (postTimestamp > timestamp) {
+                results.add(new Result(Integer.parseInt(post.get("guid")),
+                        Long.parseLong(post.get("timestamp")),
+                        post.get("ciphered"), post.get("author")));
+            }
+        }
+
+        return results;
+    }
+
+    @Override
+    public void newPeerPost(int guid, long date, String ciphered, String author) throws Exception {
+        String content = this.decypherText(ciphered, author);
+        this.getPeerData().addPost(author, guid, content, ciphered, date);
     }
 
     public void shutdown() {

@@ -1,11 +1,9 @@
 package org.t3.g11.proj2.nuttela;
 
-import org.t3.g11.proj2.nuttela.message.GnuMessage;
 import org.t3.g11.proj2.nuttela.message.QueryHitMessage;
 import org.t3.g11.proj2.nuttela.message.QueryMessage;
 
 import java.io.IOException;
-import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
 import java.util.HashSet;
 
@@ -15,7 +13,7 @@ public class BootstrapGnuNode extends GnuNode {
     public static final int MAX_NEIGH = 50;
 
     public BootstrapGnuNode() throws IOException {
-        super(null, BootstrapGnuNode.BOOTSTRAPID, BootstrapGnuNode.NODEENDPOINT,
+        super(BootstrapGnuNode.BOOTSTRAPID, BootstrapGnuNode.NODEENDPOINT,
                 BootstrapGnuNode.MAX_NEIGH, 1);
     }
 

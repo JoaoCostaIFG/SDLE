@@ -3,7 +3,7 @@ package org.t3.g11.proj2.nuttela;
 import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
 import org.t3.g11.proj2.nuttela.message.*;
-import org.t3.g11.proj2.peer.Peer;
+import org.t3.g11.proj2.peer.PeerObserver;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,14 +36,13 @@ public class GnuNode implements Runnable {
     protected final ExecutorService timeouts;
     protected final ScheduledExecutorService checkTopologyScheduler;
     protected final ServerSocket serverSocket;
-    protected final Peer peer;
     protected final int maxNeigh;
 
     protected BloomFilter<String> bloomFilter;
     private int bloomFilterCapacity = GnuNodeInfo.BLOOMSIZE;
+    private PeerObserver peerObserver = null;
 
-    public GnuNode(Peer peer, int id, InetSocketAddress addr, int maxNeigh, int capacity) throws IOException {
-        this.peer = peer;
+    public GnuNode(int id, InetSocketAddress addr, int maxNeigh, int capacity) throws IOException {
         this.id = id; // TODO hash username
         this.addr = addr;
         this.maxNeigh = maxNeigh;
@@ -60,11 +59,16 @@ public class GnuNode implements Runnable {
         this.timeouts = Executors.newCachedThreadPool();
         this.checkTopologyScheduler = Executors.newSingleThreadScheduledExecutor();
 
-        this.serverSocket = new ServerSocket(this.addr.getPort(), 100, this.addr.getAddress());
+        this.serverSocket = new ServerSocket(this.addr.getPort(), 100,
+                this.addr.getAddress());
     }
 
-    public GnuNode(Peer peer, int id, InetSocketAddress addr, int maxNeigh) throws IOException {
-        this(peer, id, addr, maxNeigh, (int) ((Math.random() * (10 - 2)) + 2));
+    public GnuNode(int id, InetSocketAddress addr, int maxNeigh) throws IOException {
+        this(id, addr, maxNeigh, (int) ((Math.random() * (10 - 2)) + 2));
+    }
+
+    public void setObserver(PeerObserver peerObserver) {
+        this.peerObserver = peerObserver;
     }
 
     public void addToBloom(String newEntry) {
@@ -200,9 +204,17 @@ public class GnuNode implements Runnable {
 
         // TODO incremental sleep retries
         for (int nTries = 0; nTries < 5; ++nTries) {
-            for (Map.Entry<Integer, GnuNodeInfo> neighbour : this.neighbors.entrySet().stream()
-                    .sorted(Map.Entry.comparingByValue(Comparator.comparingInt(n -> n.capacity))).toList()) {
+            List<Map.Entry<Integer, GnuNodeInfo>> sortedNeighs = new ArrayList<>(this.neighbors.entrySet());
+            // neighbors are sorted by:
+            // first - if they probably contain the content of the query
+            // second - by its capacity
+            sortedNeighs.sort(Map.Entry.comparingByValue(Comparator.comparingInt(n -> n.capacity)));
+            Collections.reverse(sortedNeighs);
+            // 0 and 1 swapped to get mightContain in descending order
+            sortedNeighs.sort(Map.Entry.comparingByValue(Comparator.comparingInt(n ->
+                    n.bloomFilter.mightContain(qm.getQuery().getQueryString()) ? 0 : 1)));
 
+            for (Map.Entry<Integer, GnuNodeInfo> neighbour : sortedNeighs) {
                 int neighId = neighbour.getKey();
                 GnuNodeInfo neighInfo = neighbour.getValue();
                 // if already sent
@@ -223,12 +235,8 @@ public class GnuNode implements Runnable {
         }
     }
 
-    public void query(String sub) {
-        this.query(new QueryMessage(this.addr, this.id, new Query(this.addr, this.id, sub)));
-    }
-
-    public void query(String sub, long latestDate) {
-        this.query(new QueryMessage(this.addr, this.id, new Query(this.addr, this.id, sub, latestDate)));
+    public void query(int neededHits, String queryString, long queryTimestamp) {
+        this.query(new QueryMessage(this.addr, this.id, new Query(this.addr, this.id, neededHits, queryString, queryTimestamp)));
     }
 
     /**
@@ -409,17 +417,12 @@ public class GnuNode implements Runnable {
     protected void handleQuery(QueryMessage reqMsg) {
         // TODO this is only searching by username
         Query query = reqMsg.getQuery();
-        if (this.bloomFilter.mightContain(query.getQueryString())) {
+        if (this.bloomFilter.mightContain(query.getQueryString()) && this.peerObserver != null) {
             // gather results
-            List<Result> results = new ArrayList<>();
-            for (HashMap<String, String> post : this.peer.getUserPosts(reqMsg.getQuery().getQueryString())) {
-                if (Long.parseLong(post.get("timestamp")) > reqMsg.getQuery().getLatestDate())
-                    results.add(new Result(Integer.parseInt(post.get("guid")),
-                            Long.parseLong(post.get("timestamp")),
-                            post.get("ciphered"), post.get("author")));
-            }
+            List<Result> results = this.peerObserver.getResults(query.getQueryString(), query.getLatestDate());
             if (!results.isEmpty()) {
                 // got a hit
+                reqMsg.decreaseNeededHits(results.size());
                 try (Socket sendSkt = new Socket(query.getSourceAddr(), query.getSourcePort())) {
                     ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
                     QueryHitMessage qhm = new QueryHitMessage(this.addr, reqMsg.getGuid(), results);
@@ -432,11 +435,12 @@ public class GnuNode implements Runnable {
             }
         }
 
-        // didn't get a hit (don't sub or result list is empty)
-        if (!this.sentTo.containsKey(reqMsg.getGuid()))
-            this.sentTo.put(reqMsg.getGuid(), new HashSet<>());
-        this.sentTo.get(reqMsg.getGuid()).add(reqMsg.getId());
-        if (reqMsg.decreaseTtl() > 0) {
+        if (reqMsg.decreaseTtl() > 0 && reqMsg.getNeededHits() > 0) {
+            // didn't get a hit (don't sub or result list is empty)
+            if (!this.sentTo.containsKey(reqMsg.getGuid()))
+                this.sentTo.put(reqMsg.getGuid(), new HashSet<>());
+            this.sentTo.get(reqMsg.getGuid()).add(reqMsg.getId());
+
             // update source address and id to relay
             reqMsg.setAddr(this.addr);
             reqMsg.setId(this.id);
@@ -451,8 +455,7 @@ public class GnuNode implements Runnable {
         List<Result> hitPosts = reqMsg.getResultSet();
         for (Result post : hitPosts) {
             try {
-                String content = this.peer.decypherText(post.ciphered, post.author);
-                this.peer.getPeerData().addPost(post.author, post.guid, content, post.ciphered, post.date);
+                this.peerObserver.newPeerPost(post.guid, post.date, post.ciphered, post.author);
             } catch (Exception e) {
                 System.err.println("Got a post from someone that does not exist (does not have keys)");
                 e.printStackTrace();

@@ -14,12 +14,16 @@ public class Query implements Serializable {
     private final InetSocketAddress sourceAddr;
     private final int sourceId;
     private final int guid;
+    private int neededHits;
+
     private final String queryString;
     private final long latestDate;
 
-    public Query(InetSocketAddress sourceAddr, int sourceId, String queryString, long latestDate) {
+    public Query(InetSocketAddress sourceAddr, int sourceId, int neededHits, String queryString, long latestDate) {
         this.sourceAddr = sourceAddr;
         this.sourceId = sourceId;
+        this.neededHits = neededHits;
+
         this.queryString = queryString;
         this.latestDate = latestDate;
 
@@ -29,8 +33,8 @@ public class Query implements Serializable {
         }
     }
 
-    public Query(InetSocketAddress sourceAddr, int sourceId, String queryString) {
-        this(sourceAddr, sourceId, queryString, Query.ALLDATE);
+    public Query(InetSocketAddress sourceAddr, int sourceId, int neededHits, String queryString) {
+        this(sourceAddr, sourceId, neededHits, queryString, Query.ALLDATE);
     }
 
     public InetAddress getSourceAddr() {
@@ -55,5 +59,13 @@ public class Query implements Serializable {
 
     public long getLatestDate() {
         return this.latestDate;
+    }
+
+    public void decreaseNeededHits(int amount) {
+        this.neededHits -= amount;
+    }
+
+    public int getNeededHits() {
+        return this.neededHits;
     }
 }

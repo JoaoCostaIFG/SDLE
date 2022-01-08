@@ -5,7 +5,7 @@ import org.t3.g11.proj2.nuttela.GnuNodeCMD;
 import java.net.InetSocketAddress;
 
 public class QueryMessage extends GnuIdMessage {
-    public static final int STARTTTL = 30;// 1024;
+    public static final int STARTTTL = 1024;
 
     private final Query query;
 
@@ -35,5 +35,13 @@ public class QueryMessage extends GnuIdMessage {
 
     public int decreaseTtl() {
         return --this.ttl;
+    }
+
+    public void decreaseNeededHits(int amount) {
+        this.query.decreaseNeededHits(amount);
+    }
+
+    public int getNeededHits() {
+        return this.query.getNeededHits();
     }
 }
