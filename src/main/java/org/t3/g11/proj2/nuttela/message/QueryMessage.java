@@ -31,4 +31,9 @@ public class QueryMessage extends GnuIdMessage {
     public int getNeededHits() {
         return this.query.getNeededHits();
     }
+
+    @Override
+    public String toString() {
+        return super.toString() + " " + this.query;
+    }
 }
