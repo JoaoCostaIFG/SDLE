@@ -1,7 +1,5 @@
 package org.t3.g11.proj2.peer;
 
-import org.t3.g11.proj2.keyserver.KeyServer;
-
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
@@ -29,6 +27,24 @@ public class KeyHolder {
         this.keySize = keySize;
         this.keyFactory = KeyFactory.getInstance(keyInstance);
         this.cipher = Cipher.getInstance(keyInstance);
+    }
+
+    public static void writeKeyToFile(PrivateKey key, String username) throws IOException {
+        byte[] encoded = key.getEncoded();
+        FileOutputStream keyfos = new FileOutputStream(username + ".priv");
+        keyfos.write(encoded);
+        keyfos.close();
+    }
+
+    public static void writeKeyToFile(PublicKey key, String username) throws IOException {
+        byte[] encoded = key.getEncoded();
+        FileOutputStream keyfos = new FileOutputStream(username + ".pub");
+        keyfos.write(encoded);
+        keyfos.close();
+    }
+
+    public static String encodeKey(Key key) {
+        return Base64.getEncoder().encodeToString(key.getEncoded());
     }
 
     public KeyPair generateKeyPair() throws NoSuchAlgorithmException {
@@ -88,6 +104,15 @@ public class KeyHolder {
         return this.decrypt(buf, this.publicKey);
     }
 
+    public String decryptStr(String ciphered, PublicKey publicKey) throws InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+        byte[] buf = Base64.getDecoder().decode(ciphered);
+        return new String(this.decrypt(buf, publicKey));
+    }
+
+    public String decryptStr(String ciphered) throws InvalidKeyException, IllegalBlockSizeException, BadPaddingException {
+        return this.decryptStr(ciphered, this.publicKey);
+    }
+
     public PublicKey genPubKey(byte[] keyBuf) throws InvalidKeySpecException {
         X509EncodedKeySpec pubKeySpec = new X509EncodedKeySpec(keyBuf);
         return keyFactory.generatePublic(pubKeySpec);
@@ -116,23 +141,5 @@ public class KeyHolder {
         byte[] pubKeyBuf = keyfis.readAllBytes();
         keyfis.close();
         this.publicKey = this.genPubKey(pubKeyBuf);
-    }
-
-    public static void writeKeyToFile(PrivateKey key, String username) throws IOException {
-        byte[] encoded = key.getEncoded();
-        FileOutputStream keyfos = new FileOutputStream(username + ".priv");
-        keyfos.write(encoded);
-        keyfos.close();
-    }
-
-    public static void writeKeyToFile(PublicKey key, String username) throws IOException {
-        byte[] encoded = key.getEncoded();
-        FileOutputStream keyfos = new FileOutputStream(username + ".pub");
-        keyfos.write(encoded);
-        keyfos.close();
-    }
-
-    public static String encodeKey(Key key) {
-        return Base64.getEncoder().encodeToString(key.getEncoded());
     }
 }

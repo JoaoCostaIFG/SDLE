@@ -1,9 +1,10 @@
 package org.t3.g11.proj2.peer;
 
+import org.sqlite.SQLiteErrorCode;
+import org.t3.g11.proj2.utils.Utils;
+
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 
 public class PeerData {
     private final Connection connection;
@@ -12,6 +13,10 @@ public class PeerData {
     public PeerData(String username) throws SQLException {
         this.username = username;
         this.connection = DriverManager.getConnection("jdbc:sqlite:" + username + ".db");
+    }
+
+    public String getSelfUsername() {
+        return this.username;
     }
 
     public void reInitDB() throws SQLException {
@@ -28,7 +33,7 @@ public class PeerData {
         stmt.execute("""
                 CREATE TABLE Post (
                   post_id INTEGER PRIMARY KEY ASC,
-                  post_date INTEGER NOT NULL DEFAULT (strftime('%s', CURRENT_TIMESTAMP)),
+                  post_date INTEGER NOT NULL,
                   post_ciphered TEXT NOT NULL,
                   post_content TEXT NOT NULL,
                   user_id INTEGER NOT NULL,
@@ -47,45 +52,77 @@ public class PeerData {
         pstmt.close();
     }
 
-    public void addUserSelf(String pubkey) throws SQLException {
-        this.addUser(this.username, pubkey);
-    }
-
-    public void addPost(int user_id, String content, String ciphered) throws SQLException {
-        PreparedStatement pstmt = this.connection.prepareStatement("INSERT INTO Post(post_content, post_ciphered, user_id) VALUES(?, ?, ?)");
-        pstmt.setString(1, content);
-        pstmt.setString(2, ciphered);
-        pstmt.setInt(3, user_id);
+    public void removeUser(String username) throws SQLException {
+        PreparedStatement pstmt = this.connection.prepareStatement("DELETE FROM User WHERE user_username = ?");
+        pstmt.setString(1, username);
         pstmt.executeUpdate();
         pstmt.close();
     }
 
-    public void addPost(String user_username, String content, String ciphered) throws SQLException {
+    public void addUserSelf(String pubkey) throws SQLException {
+        this.addUser(this.username, pubkey);
+    }
+
+    public int getIdFromUsername(String username) throws SQLException {
         PreparedStatement pstmt = this.connection.prepareStatement("SELECT user_id FROM User WHERE user_username = ?");
-        pstmt.setString(1, user_username);
+        pstmt.setString(1, username);
         ResultSet res = pstmt.executeQuery();
-        if (!res.next()) throw new SQLException("User " + user_username + " not found");
+        if (!res.next()) throw new SQLException("User " + username + " not found");
         int user_id = res.getInt("user_id");
         pstmt.close();
 
-        this.addPost(user_id, content, ciphered);
+        return user_id;
+    }
+
+    public void addPost(int user_id, int guid, String content, String ciphered, long date) throws SQLException {
+        PreparedStatement pstmt = this.connection.prepareStatement("INSERT INTO Post(post_id, post_content, post_ciphered, user_id, post_date) VALUES(?, ?, ?, ?, ?)");
+        System.out.println("Content: " + content);
+        pstmt.setInt(1, guid);
+        pstmt.setString(2, content);
+        pstmt.setString(3, ciphered);
+        pstmt.setInt(4, user_id);
+        pstmt.setLong(5, date);
+        try {
+            pstmt.executeUpdate();
+        } catch (SQLException throwables) {
+            // ignore exception on duplicated posts <3
+            if (throwables.getErrorCode() != SQLiteErrorCode.SQLITE_CONSTRAINT.code) {
+                throw throwables;
+            }
+        }
+        pstmt.close();
+    }
+
+    public void addPost(String user_username, int guid, String content, String ciphered, long date) throws SQLException {
+        int user_id = this.getIdFromUsername(user_username);
+        this.addPost(user_id, guid, content, ciphered, date);
+    }
+
+    public void addPostSelf(String content, String ciphered) throws SQLException {
+        long timestamp = System.currentTimeMillis();
+        String toHash = this.username + timestamp;
+        this.addPost(this.username, Utils.IdFromName(toHash), content, ciphered, timestamp);
     }
 
     public List<HashMap<String, String>> getPosts(int user_id) throws SQLException {
         PreparedStatement pstmt =
-                this.connection.prepareStatement("SELECT User.user_username, Post.post_date, Post.post_content " +
-                                                    "FROM (Post INNER JOIN User ON Post.user_id = User.user_id) " +
-                                                    "WHERE Post.user_id = ?");
+                this.connection.prepareStatement("""
+                        SELECT User.user_username, Post.post_id, Post.post_date, Post.post_content, Post.post_ciphered
+                        FROM (Post INNER JOIN User ON Post.user_id = User.user_id)
+                        WHERE Post.user_id = ?
+                        """);
         pstmt.setInt(1, user_id);
         ResultSet res = pstmt.executeQuery();
 
 
         List<HashMap<String, String>> ret = new ArrayList<>();
-        while(res.next()){
+        while (res.next()) {
             HashMap<String, String> elem = new HashMap<>();
+            elem.put("guid", res.getString("post_id"));
             elem.put("author", res.getString("user_username"));
             elem.put("timestamp", res.getString("post_date"));
             elem.put("content", res.getString("post_content"));
+            elem.put("ciphered", res.getString("post_ciphered"));
             ret.add(elem);
         }
 
@@ -94,21 +131,55 @@ public class PeerData {
     }
 
     public List<HashMap<String, String>> getPosts(String user_username) throws SQLException {
-        PreparedStatement pstmt = this.connection.prepareStatement("SELECT user_id FROM User WHERE user_username = ?");
-        pstmt.setString(1, user_username);
-        ResultSet res = pstmt.executeQuery();
-        if (!res.next()) throw new SQLException("User " + user_username + " not found");
-        int user_id = res.getInt("user_id");
-        pstmt.close();
-
+        int user_id = this.getIdFromUsername(user_username);
         return this.getPosts(user_id);
     }
 
     public List<HashMap<String, String>> getPostsSelf() throws SQLException {
-       return this.getPosts(this.username);
+        return this.getPosts(this.username);
     }
 
-    public void addPostSelf(String content, String ciphered) throws SQLException {
-        this.addPost(this.username, content, ciphered);
+    public long getLastUserPostDate(String user_username) throws SQLException {
+        int user_id = this.getIdFromUsername(user_username);
+        PreparedStatement pstmt =
+                this.connection.prepareStatement("""
+                        SELECT post_date
+                        FROM Post
+                        WHERE Post.user_id = ?
+                        ORDER BY post_date DESC
+                        LIMIT 1
+                        """);
+        pstmt.setInt(1, user_id);
+        ResultSet res = pstmt.executeQuery();
+        if (!res.next()) return 0;
+        return res.getLong("post_date");
+    }
+
+    public String getUserKey(String user_username) throws SQLException {
+        PreparedStatement pstmt = this.connection.prepareStatement("SELECT user_pubkey FROM User WHERE user_username = ?");
+        pstmt.setString(1, user_username);
+        ResultSet res = pstmt.executeQuery();
+        if (!res.next()) return null;
+        String user_pubkey = res.getString("user_pubkey");
+        pstmt.close();
+        return user_pubkey;
+    }
+
+    public Set<String> getSubs() throws SQLException {
+        PreparedStatement pstmt =
+                this.connection.prepareStatement("""
+                        SELECT user_username FROM User
+                        WHERE user_username <> ?
+                        """);
+        pstmt.setString(1, this.username);
+        ResultSet res = pstmt.executeQuery();
+
+        Set<String> ret = new HashSet<>();
+        while (res.next()) {
+            ret.add(res.getString("user_username"));
+        }
+
+        pstmt.close();
+        return ret;
     }
 }

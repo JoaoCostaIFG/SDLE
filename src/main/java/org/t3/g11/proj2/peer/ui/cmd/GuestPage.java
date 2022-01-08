@@ -28,9 +28,11 @@ public class GuestPage implements CmdPage {
         // TODO this username is random each time!!!!!!!
         switch (cmd) {
             case 'r', 'R' -> {
-                byte[] buf = new byte[12];
-                new Random().nextBytes(buf);
-                String username = new String(Base64.getEncoder().encode(buf)).replaceAll("/", "");
+                System.out.println("Username:");
+                String username = sc.nextLine();
+//                byte[] buf = new byte[12];
+//                new Random().nextBytes(buf);
+//                String username = new String(Base64.getEncoder().encode(buf)).replaceAll("/", "");
                 if (!this.cmdInterface.getPeer().register(username)) {
                     System.out.println("Register failed");
                 } else {

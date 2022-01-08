@@ -10,7 +10,7 @@ public interface CmdPage {
 
         do {
             nextLine = sc.nextLine().strip();
-        } while(nextLine.isEmpty());
+        } while (nextLine.isEmpty());
 
         return nextLine.charAt(0);
     }
