@@ -7,6 +7,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 
 public class Query implements Serializable {
+    public static final int STARTTTL = 1024;
     public final static long ALLDATE = 0;
 
     private static volatile Integer seqNum = 0;
@@ -15,14 +16,16 @@ public class Query implements Serializable {
     private final int sourceId;
     private final int guid;
     private int neededHits;
+    private int ttl;
 
     private final String queryString;
     private final long latestDate;
 
-    public Query(InetSocketAddress sourceAddr, int sourceId, int neededHits, String queryString, long latestDate) {
+    public Query(InetSocketAddress sourceAddr, int sourceId, int neededHits, int ttl, String queryString, long latestDate) {
         this.sourceAddr = sourceAddr;
         this.sourceId = sourceId;
         this.neededHits = neededHits;
+        this.ttl = ttl;
 
         this.queryString = queryString;
         this.latestDate = latestDate;
@@ -33,8 +36,8 @@ public class Query implements Serializable {
         }
     }
 
-    public Query(InetSocketAddress sourceAddr, int sourceId, int neededHits, String queryString) {
-        this(sourceAddr, sourceId, neededHits, queryString, Query.ALLDATE);
+    public Query(InetSocketAddress sourceAddr, int sourceId, int neededHits, String queryString, long latestDate) {
+        this(sourceAddr, sourceId, neededHits, Query.STARTTTL, queryString, latestDate);
     }
 
     public InetAddress getSourceAddr() {
@@ -67,5 +70,13 @@ public class Query implements Serializable {
 
     public int getNeededHits() {
         return this.neededHits;
+    }
+
+    public int decreaseTtl() {
+        return --this.ttl;
+    }
+
+    public int getSize() {
+        return this.queryString.length() + 8; // 8 bytes from the latestDate
     }
 }

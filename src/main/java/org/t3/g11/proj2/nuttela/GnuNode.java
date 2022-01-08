@@ -2,6 +2,7 @@ package org.t3.g11.proj2.nuttela;
 
 import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
+import com.google.common.util.concurrent.AtomicDouble;
 import org.t3.g11.proj2.nuttela.message.*;
 import org.t3.g11.proj2.peer.PeerObserver;
 
@@ -41,6 +42,10 @@ public class GnuNode implements Runnable {
     protected BloomFilter<String> bloomFilter;
     private int bloomFilterCapacity = GnuNodeInfo.BLOOMSIZE;
     private PeerObserver peerObserver = null;
+
+    private final Semaphore querySemaphore = new Semaphore(0, true);
+    private AtomicDouble maxFinishTagServed = new AtomicDouble(0.0);
+    private AtomicDouble currentStartTag = new AtomicDouble(-1.0);
 
     public GnuNode(int id, InetSocketAddress addr, int maxNeigh, int capacity) throws IOException {
         this.id = id; // TODO hash username
@@ -365,6 +370,9 @@ public class GnuNode implements Runnable {
         // schedule pings
         ScheduledExecutorService pingScheduler = Executors.newSingleThreadScheduledExecutor();
         pingScheduler.scheduleAtFixedRate(this::ping, 1, PING_FREQ, TimeUnit.SECONDS);
+        // schedule query handling (fair-queued)
+        ExecutorService queryExecutor = Executors.newSingleThreadExecutor();
+        queryExecutor.execute(this::handleQueuedQueryLoop);
         // schedule topology adaptation
         this.scheduleNextTopology(this.getSatisfaction());
 
@@ -408,58 +416,6 @@ public class GnuNode implements Runnable {
             oos.close();
         } catch (IOException e) {
             e.printStackTrace();
-        }
-    }
-
-    /**
-     * --->> Ack
-     */
-    protected void handleQuery(QueryMessage reqMsg) {
-        // TODO this is only searching by username
-        Query query = reqMsg.getQuery();
-        if (this.bloomFilter.mightContain(query.getQueryString()) && this.peerObserver != null) {
-            // gather results
-            List<Result> results = this.peerObserver.getResults(query.getQueryString(), query.getLatestDate());
-            if (!results.isEmpty()) {
-                // got a hit
-                reqMsg.decreaseNeededHits(results.size());
-                try (Socket sendSkt = new Socket(query.getSourceAddr(), query.getSourcePort())) {
-                    ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
-                    QueryHitMessage qhm = new QueryHitMessage(this.addr, reqMsg.getGuid(), results);
-                    oss.writeObject(qhm);
-                    oss.flush();
-                } catch (Exception e) {
-                    System.err.println("Couldn't connect to initiator peer");
-                    e.printStackTrace();
-                }
-            }
-        }
-
-        if (reqMsg.decreaseTtl() > 0 && reqMsg.getNeededHits() > 0) {
-            // didn't get a hit (don't sub or result list is empty)
-            if (!this.sentTo.containsKey(reqMsg.getGuid()))
-                this.sentTo.put(reqMsg.getGuid(), new HashSet<>());
-            this.sentTo.get(reqMsg.getGuid()).add(reqMsg.getId());
-
-            // update source address and id to relay
-            reqMsg.setAddr(this.addr);
-            reqMsg.setId(this.id);
-            this.query(reqMsg);
-        }
-    }
-
-    /**
-     * <<--- QueryHit
-     */
-    protected void handleQueryHit(QueryHitMessage reqMsg) {
-        List<Result> hitPosts = reqMsg.getResultSet();
-        for (Result post : hitPosts) {
-            try {
-                this.peerObserver.newPeerPost(post.guid, post.date, post.ciphered, post.author);
-            } catch (Exception e) {
-                System.err.println("Got a post from someone that does not exist (does not have keys)");
-                e.printStackTrace();
-            }
         }
     }
 
@@ -579,6 +535,104 @@ public class GnuNode implements Runnable {
             oos.flush();
         } catch (IOException e) {
             System.err.println("DROP handling failed.");
+        }
+    }
+
+    /**
+     * <<--- QueryMsg
+     */
+    protected void handleQuery(QueryMessage reqMsg) {
+        Query query = reqMsg.getQuery();
+        int neighId = reqMsg.getId();
+        // queue query forwarding
+        if (this.neighbors.containsKey(neighId)) {
+            // TODO should be a single instruction
+            double virtTime;
+            double currentStartTag = this.currentStartTag.get();
+            if (currentStartTag > 0.0) {
+                // server is busy
+                virtTime = currentStartTag;
+            } else {
+                // server is mimir
+                virtTime = this.maxFinishTagServed.get();
+            }
+            this.neighbors.get(neighId).queueQuery(query, virtTime);
+            this.querySemaphore.release();
+        }
+    }
+
+    /**
+     * <<--- QueryHit
+     */
+    protected void handleQueryHit(QueryHitMessage reqMsg) {
+        List<Result> hitPosts = reqMsg.getResultSet();
+        for (Result post : hitPosts) {
+            try {
+                this.peerObserver.newPeerPost(post.guid, post.date, post.ciphered, post.author);
+            } catch (Exception e) {
+                System.err.println("Got a post from someone that does not exist (does not have keys)");
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void handleQueuedQuery(QueuedQuery queuedQuery) {
+        Query query = queuedQuery.getQuery();
+        // TODO this is only searching by username
+        if (this.bloomFilter.mightContain(query.getQueryString()) && this.peerObserver != null) {
+            // gather results
+            List<Result> results = this.peerObserver.getResults(query.getQueryString(), query.getLatestDate());
+            if (!results.isEmpty()) {
+                // got a hit
+                query.decreaseNeededHits(results.size());
+                try (Socket sendSkt = new Socket(query.getSourceAddr(), query.getSourcePort())) {
+                    ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
+                    QueryHitMessage qhm = new QueryHitMessage(this.addr, query.getGuid(), results);
+                    oss.writeObject(qhm);
+                    oss.flush();
+                } catch (Exception e) {
+                    System.err.println("Couldn't connect to initiator peer");
+                    e.printStackTrace();
+                }
+            }
+        }
+        // maybe forward
+        if (query.decreaseTtl() > 0 && query.getNeededHits() > 0) {
+            // didn't get a hit (don't sub or result list is empty)
+            if (!this.sentTo.containsKey(query.getGuid()))
+                this.sentTo.put(query.getGuid(), new HashSet<>());
+            this.sentTo.get(query.getGuid()).add(queuedQuery.getHopId());
+
+            QueryMessage relayMsg = new QueryMessage(this.addr, this.id, query);
+            this.query(relayMsg);
+        }
+    }
+
+    private void handleQueuedQueryLoop() {
+        try {
+            while (!Thread.interrupted()) {
+                this.querySemaphore.acquire();
+
+                QueuedQuery earliestQueue = null;
+                GnuNodeInfo frien = null;
+                for (GnuNodeInfo i : this.neighbors.values()) {
+                    QueuedQuery qq = i.peekNextQuery();
+                    if (frien == null || earliestQueue.getStartTag() > qq.getStartTag()) {
+                        earliestQueue = qq;
+                        frien = i;
+                    }
+                }
+                // very weird condition
+                if (frien == null) {
+                    System.err.println("Unexpected null when looking for the next query to handle.");
+                    continue;
+                }
+
+                QueuedQuery queuedQuery = frien.popNextQuery();
+                this.executors.execute(() -> this.handleQueuedQuery(queuedQuery));
+            }
+        } catch (InterruptedException e) {
+            // bye bye
         }
     }
 }

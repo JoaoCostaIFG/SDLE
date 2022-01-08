@@ -1,7 +1,9 @@
 package org.t3.g11.proj2.nuttela;
 
+import com.google.common.collect.MinMaxPriorityQueue;
 import com.google.common.hash.BloomFilter;
 import org.t3.g11.proj2.nuttela.message.PongMessage;
+import org.t3.g11.proj2.nuttela.message.Query;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -14,6 +16,8 @@ public class GnuNodeInfo {
 
     public static final int BLOOMSIZE = 500;
     public static final float BLOOMMISSCHANCE = 0.01f;
+
+    private final MinMaxPriorityQueue<QueuedQuery> queuedQuerries;
 
     public int id;
     public int nNeighbors;
@@ -29,6 +33,8 @@ public class GnuNodeInfo {
         this.state = 1;
         this.address = address;
         this.bloomFilter = bloomFilter;
+
+        this.queuedQuerries = MinMaxPriorityQueue.create();
     }
 
     public void updateInfo(PongMessage pongMessage) {
@@ -47,6 +53,10 @@ public class GnuNodeInfo {
 
     public boolean isDead() {
         return this.state == GnuNodeInfo.DEAD;
+    }
+
+    public boolean isAlive() {
+        return this.state == GnuNodeInfo.ALIVE;
     }
 
     public void setDead() {
@@ -74,5 +84,25 @@ public class GnuNodeInfo {
 
     public int getPort() {
         return this.address.getPort();
+    }
+
+    public void queueQuery(Query query, double virtTime) {
+        synchronized (this.queuedQuerries) {
+            final int weight = this.capacity;
+            final double prevFinishTag = this.queuedQuerries.peekLast().getFinishTag();
+            this.queuedQuerries.add(new QueuedQuery(query, virtTime, prevFinishTag, weight, this.id));
+        }
+    }
+
+    public QueuedQuery peekNextQuery() {
+        synchronized (this.queuedQuerries) {
+            return this.queuedQuerries.peekFirst();
+        }
+    }
+
+    public QueuedQuery popNextQuery() {
+        synchronized (this.queuedQuerries) {
+            return this.queuedQuerries.poll();
+        }
     }
 }
