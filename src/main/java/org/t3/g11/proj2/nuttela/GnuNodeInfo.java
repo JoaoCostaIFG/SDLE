@@ -89,7 +89,8 @@ public class GnuNodeInfo {
     public void queueQuery(Query query, double virtTime) {
         synchronized (this.queuedQuerries) {
             final int weight = this.capacity;
-            final double prevFinishTag = this.queuedQuerries.peekLast().getFinishTag();
+            QueuedQuery prevFinish = this.queuedQuerries.peekLast();
+            final double prevFinishTag = (prevFinish == null) ? 0.0 : prevFinish.getFinishTag();
             this.queuedQuerries.add(new QueuedQuery(query, virtTime, prevFinishTag, weight, this.id));
         }
     }

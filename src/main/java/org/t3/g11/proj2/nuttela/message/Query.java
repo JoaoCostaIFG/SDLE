@@ -79,4 +79,9 @@ public class Query implements Serializable {
     public int getSize() {
         return this.queryString.length() + 8; // 8 bytes from the latestDate
     }
+
+    @Override
+    public String toString() {
+        return String.format("Query(%d - %s, %d)", this.guid, this.queryString, this.latestDate);
+    }
 }
