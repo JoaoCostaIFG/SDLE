@@ -70,6 +70,7 @@ public class GnuNode implements Runnable {
 
     public GnuNode(int id, InetSocketAddress addr, int maxNeigh) throws IOException {
         this(id, addr, maxNeigh, (int) ((Math.random() * (10 - 2)) + 2));
+        System.out.println(addr);
     }
 
     public void setObserver(PeerObserver peerObserver) {

@@ -43,6 +43,8 @@ public class Peer implements PeerObserver {
             throw new Exception("Failed to connect to keyserver.");
         }
 
+        System.out.println(address);
+
         this.authenticated = false;
         this.keyHolder = new KeyHolder(KeyServer.KEYINSTANCE, KeyServer.KEYSIZE);
 
@@ -143,13 +145,14 @@ public class Peer implements PeerObserver {
 
     public boolean authenticate(String username) {
         this.authenticated = false;
-
+        System.out.println("Importing keys");
         try {
             this.keyHolder.importKeysFromFile(username);
         } catch (IOException | InvalidKeySpecException e) {
             e.printStackTrace();
             return false;
         }
+        System.out.println("Importing db");
 
         try {
             this.peerData = new PeerData(username);
@@ -159,7 +162,7 @@ public class Peer implements PeerObserver {
             this.keyHolder.clear();
             return false;
         }
-
+        System.out.println("Starting node");
         this.startNode();
         this.authenticated = true;
         return true;

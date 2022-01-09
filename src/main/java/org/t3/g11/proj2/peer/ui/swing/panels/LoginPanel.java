@@ -1,59 +1,42 @@
-package org.t3.g11.proj2.peer.ui.swing;
+package org.t3.g11.proj2.peer.ui.swing.panels;
 
-import com.sun.tools.jconsole.JConsoleContext;
 import net.miginfocom.swing.MigLayout;
+import org.t3.g11.proj2.peer.ui.swing.SwingInterface;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
-public class MainFrame extends JFrame {
+public class LoginPanel extends JPanel {
 
-    private final SwingInterface swi;
+    public LoginPanel(SwingInterface swi, Runnable gotoAuthenticate) {
+        super(new MigLayout("insets 20"));
 
-    public MainFrame(SwingInterface swi) {
-        super();
-
-        this.swi = swi;
-
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setTitle("Molater");
-
-//        setMinimumSize(new Dimension(500, 700));
-
-        Toolkit toolKit = getToolkit();
-        Dimension size = toolKit.getScreenSize();
-        setLocation(size.width/2 - getWidth()/2, size.height/2 - getHeight()/2);
-
-        // add components and stuff
-        add(this.basePanel());
-//        add(this.form());
-
-        pack();
-        setVisible(true);//making the frame visible
-    }
-
-    private JPanel basePanel() {
-        MigLayout layout = new MigLayout("insets 20");
-        JPanel panel = new JPanel(layout);
+        LoginPanel This = this;
 
         JLabel title = new JLabel("Welcome to Molater", JLabel.CENTER);
-        title.setPreferredSize(new Dimension(1, 27));
+        title.setHorizontalAlignment(JLabel.CENTER);
+        title.setFont( UIManager.getFont( "h0.font" ) );
 
-        panel.add(title, "span, wrap 15, growx");
+        add(title, "span, wrap 15, growx");
 
-        panel.add(new JLabel("Username"),   "span, wrap");
+        JLabel usernameLabel = new JLabel("Username");
+        usernameLabel.setFont( UIManager.getFont( "large.font" ) );
+        add(usernameLabel,   "span, wrap");
         JTextField username = createTextField();
-        panel.add(username, "span, wrap, pushx, growx");
+        username.setText("souto");
+        add(username, "span, wrap, pushx, growx");
 
         JLabel warningText = new JLabel("Error message here");
         warningText.setForeground(Color.red);
         warningText.setVisible(false);
-        panel.add(warningText, "span, wrap");
+        add(warningText, "span, wrap");
 
         JButton registerButton = new JButton("Register");
+        registerButton.setFont( UIManager.getFont("h3.font") );
         JButton loginButton = new JButton("Login");
+        loginButton.setFont( UIManager.getFont("h3.font") );
 
         registerButton.addActionListener(new ActionListener() {
             @Override
@@ -65,7 +48,6 @@ public class MainFrame extends JFrame {
 
                     username.setText("");
 
-                    pack();
                     return;
                 }
 
@@ -73,7 +55,7 @@ public class MainFrame extends JFrame {
                 loginButton.setEnabled(false);
 
                 if (swi.peer.register(user)) {
-                    System.out.println("hell yeah brotha");
+                    gotoAuthenticate.run();
                 } else {
                     warningText.setText("Username already exists");
                     warningText.setVisible(true);
@@ -82,16 +64,16 @@ public class MainFrame extends JFrame {
 
                     registerButton.setEnabled(true);
                     loginButton.setEnabled(true);
-
-                    pack();
                 }
             }
         });
-        panel.add(registerButton, "gaptop 10");
+        add(registerButton, "gaptop 10");
 
         loginButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
+                System.out.println("LOGIN ATTEMPT");
+
                 String user = username.getText().trim();
                 if (user.isEmpty()) {
                     warningText.setText("Username must not be empty");
@@ -99,7 +81,6 @@ public class MainFrame extends JFrame {
 
                     username.setText("");
 
-                    pack();
                     return;
                 }
 
@@ -107,7 +88,7 @@ public class MainFrame extends JFrame {
                 loginButton.setEnabled(false);
 
                 if (swi.peer.authenticate(user)) {
-                    System.out.println("hell yeah brotha");
+                    gotoAuthenticate.run();
                 } else {
                     warningText.setText("Failed to load " + user + "'s key or database");
                     warningText.setVisible(true);
@@ -116,14 +97,10 @@ public class MainFrame extends JFrame {
 
                     registerButton.setEnabled(true);
                     loginButton.setEnabled(true);
-
-                    pack();
                 }
             }
         });
-        panel.add(new JButton("Login"), "gapleft 30");
-
-        return panel;
+        add(loginButton);
     }
 
     private JTextField createTextField() {
@@ -131,5 +108,4 @@ public class MainFrame extends JFrame {
         tf.setPreferredSize(new Dimension(1, 27));
         return tf;
     }
-
 }
