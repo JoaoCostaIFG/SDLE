@@ -520,6 +520,11 @@ public class GnuNode implements Runnable {
                 }
             }
 
+            if (maxEntry == null) {
+                this.neighbors.put(neighReply.getId(), newNeighInfo);
+                return;
+            }
+
             DropMessage dropMessage = new DropMessage(this.addr, this.id);
             GnuMessage reply;
             try (Socket socket = new Socket(maxEntry.getValue().getInetAddr(), maxEntry.getValue().getPort())) {
