@@ -171,12 +171,14 @@ public class GnuNode implements Runnable {
             }
             GnuNodeInfo toDrop =
                     Collections.max(dropCandidates, Comparator.comparingInt(e -> e.getValue().nNeighbors)).getValue();
+
             // also need the neighbor with the most capacity
-            GnuNodeInfo maxCap =
-                    Collections.max(this.neighbors.entrySet().stream().toList(), Comparator.comparingInt(e -> e.getValue().capacity)).getValue();
-            if (maxCap != null) {
+            Optional<Map.Entry<Integer, GnuNodeInfo>> maxCap =
+                    this.neighbors.entrySet().stream().max(Comparator.comparingInt(e -> e.getValue().capacity));
+
+            if (maxCap.isPresent()) {
                 // test to accept
-                if (reply.getCapacity() > maxCap.capacity ||
+                if (reply.getCapacity() > maxCap.get().getValue().capacity ||
                         toDrop.nNeighbors > reply.getNeighbors() + GnuNode.HYSTERESIS_FACTOR) {
                     // accept Y
                     this.neighbors.put(reply.getId(), new GnuNodeInfo(reply.getId(), reply.getNeighbors(), reply.getCapacity(), reply.getAddr(), reply.getBloomFilter()));
