@@ -7,7 +7,6 @@ import org.t3.g11.proj2.nuttela.message.*;
 import org.t3.g11.proj2.peer.PeerObserver;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.InetSocketAddress;
@@ -68,9 +67,9 @@ public class GnuNode implements Runnable {
                 this.addr.getAddress());
     }
 
-    public GnuNode(int id, InetSocketAddress addr, int maxNeigh) throws IOException {
-        this(id, addr, maxNeigh, (int) ((Math.random() * (10 - 2)) + 2));
-        System.out.println(addr);
+
+    public GnuNode(int id, InetSocketAddress addr) throws IOException {
+        this(id, addr, GnuNode.MAX_NEIGH, (int) ((Math.random() * (10 - 2)) + 2));
     }
 
     public void setObserver(PeerObserver peerObserver) {
@@ -411,7 +410,7 @@ public class GnuNode implements Runnable {
             e.printStackTrace();
             return;
         }
-//        System.out.println("RECEIVED " + reqMsg);
+        //System.out.println("RECEIVED " + reqMsg);
 
         switch (reqMsg.getCmd()) {
             case PING -> this.handlePing(oos, reqMsg);

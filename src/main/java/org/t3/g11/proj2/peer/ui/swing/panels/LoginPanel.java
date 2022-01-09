@@ -72,8 +72,6 @@ public class LoginPanel extends JPanel {
         loginButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                System.out.println("LOGIN ATTEMPT");
-
                 String user = username.getText().trim();
                 if (user.isEmpty()) {
                     warningText.setText("Username must not be empty");

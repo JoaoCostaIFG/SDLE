@@ -6,6 +6,7 @@ import org.t3.g11.proj2.keyserver.KeyServerReply;
 import org.t3.g11.proj2.keyserver.message.UnidentifiedMessage;
 import org.t3.g11.proj2.nuttela.GnuNode;
 import org.t3.g11.proj2.nuttela.message.Result;
+import org.t3.g11.proj2.utils.Utils;
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
 import org.zeromq.ZMQ;
@@ -31,12 +32,14 @@ public class Peer implements PeerObserver {
 
     private final ZMQ.Socket ksSocket;
     private final KeyHolder keyHolder;
-    private final GnuNode node;
-    private final Thread nodeT;
+    private final InetSocketAddress nodeAddr; // for late intialization
+
     private PeerData peerData;
     private boolean authenticated;
+    private GnuNode node; // initialized late
+    private Thread nodeT; // initialized late
 
-    public Peer(ZContext zctx, int id, String address, int port) throws Exception {
+    public Peer(ZContext zctx, String address, int port) throws Exception {
         this.ksSocket = zctx.createSocket(SocketType.REQ);
         if (!this.ksSocket.connect(KeyServer.KEYENDPOINT)) {
             System.err.println("Failed to connect to keyserver.");
@@ -47,11 +50,7 @@ public class Peer implements PeerObserver {
 
         this.authenticated = false;
         this.keyHolder = new KeyHolder(KeyServer.KEYINSTANCE, KeyServer.KEYSIZE);
-
-        // TODO unfortunate double reference
-        this.node = new GnuNode(id, new InetSocketAddress(address, port), GnuNode.MAX_NEIGH);
-        this.node.setObserver(this);
-        this.nodeT = new Thread(this.node);
+        this.nodeAddr = new InetSocketAddress(address, port);
     }
 
     public PeerData getPeerData() {
@@ -62,6 +61,15 @@ public class Peer implements PeerObserver {
      * Called when authenticated (register/login).
      */
     public void startNode() {
+        try {
+            this.node = new GnuNode(Utils.IdFromName(this.peerData.getSelfUsername()), this.nodeAddr);
+            this.node.setObserver(this);
+            this.nodeT = new Thread(this.node);
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+
         try {
             this.node.buildBloom(this.peerData.getSubs());
             this.node.addToBloom(this.peerData.getSelfUsername());
@@ -149,7 +157,7 @@ public class Peer implements PeerObserver {
         try {
             this.keyHolder.importKeysFromFile(username);
         } catch (IOException | InvalidKeySpecException e) {
-            e.printStackTrace();
+            System.err.println("Authentication failed");
             return false;
         }
         System.out.println("Importing db");
@@ -284,8 +292,10 @@ public class Peer implements PeerObserver {
         }
     }
 
-    public List<HashMap<String, String>> getPosts() throws Exception {
-        List<HashMap<String, String>> posts = new ArrayList<>();
+    public SortedSet<HashMap<String, String>> getPosts() throws Exception {
+        Comparator<HashMap<String, String>> comparator =
+                Comparator.comparingLong(e -> Long.parseLong(e.get("timestamp")));
+        SortedSet<HashMap<String, String>> posts = new TreeSet<>(comparator.reversed());
         for (String usrnm : this.peerData.getSubs())
             posts.addAll(this.getUserPosts(usrnm));
         posts.addAll(this.getSelfPeerPosts());

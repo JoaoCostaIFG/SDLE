@@ -52,7 +52,7 @@ public class AuthenticatedPage implements CmdPage {
             }
             case 'p', 'P' -> {
                 try {
-                    List<HashMap<String, String>> posts = peer.getPosts();
+                    var posts = peer.getPosts();
                     if (posts == null || posts.isEmpty()) {
                         System.out.println("No Posts To Show");
                         return;
@@ -62,7 +62,8 @@ public class AuthenticatedPage implements CmdPage {
                     tf.printHeader();
 
                     for (HashMap<String, String> post : posts) {
-                        tf.printPostRow(post.get("author"), post.get("content"), post.get("timestamp"));
+                        tf.printPostRow(post.get("author"), post.get("content"),
+                                post.get("timestamp"));
                     }
                 } catch (Exception e) {
                     System.err.println("Error loading posts");

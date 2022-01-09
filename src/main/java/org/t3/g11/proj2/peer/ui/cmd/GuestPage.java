@@ -1,7 +1,5 @@
 package org.t3.g11.proj2.peer.ui.cmd;
 
-import java.util.Base64;
-import java.util.Random;
 import java.util.Scanner;
 
 public class GuestPage implements CmdPage {
@@ -28,11 +26,9 @@ public class GuestPage implements CmdPage {
         // TODO this username is random each time!!!!!!!
         switch (cmd) {
             case 'r', 'R' -> {
-                System.out.println("Username:");
+                System.out.print("Username: ");
+                System.out.flush();
                 String username = sc.nextLine();
-//                byte[] buf = new byte[12];
-//                new Random().nextBytes(buf);
-//                String username = new String(Base64.getEncoder().encode(buf)).replaceAll("/", "");
                 if (!this.cmdInterface.getPeer().register(username)) {
                     System.out.println("Register failed");
                 } else {
@@ -41,6 +37,8 @@ public class GuestPage implements CmdPage {
                 }
             }
             case 'l', 'L' -> {
+                System.out.print("Username: ");
+                System.out.flush();
                 String username = sc.nextLine();
                 if (!this.cmdInterface.getPeer().authenticate(username)) {
                     System.out.println("Login failed");
