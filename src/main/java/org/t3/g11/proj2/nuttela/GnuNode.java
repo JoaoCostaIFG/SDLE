@@ -254,7 +254,6 @@ public class GnuNode implements Runnable {
         this.query(new QueryMessage(this.addr, this.id, query));
     }
 
-
     public Query genQueryUser(int neededHits, String queryString, long queryTimestamp) {
         return new UserQuery(this.addr, this.id, neededHits, queryString, queryTimestamp);
     }
@@ -588,7 +587,7 @@ public class GnuNode implements Runnable {
      */
     protected void handleQueryHit(QueryHitMessage reqMsg) {
         List<Result> hitPosts = reqMsg.getResultSet();
-        this.peerObserver.handleNewResults(hitPosts);
+        this.peerObserver.handleNewResults(reqMsg.getGuid(), hitPosts);
     }
 
     private void handleQueuedQuery(QueuedQuery queuedQuery) {

@@ -74,11 +74,14 @@ public class AuthenticatedPage implements CmdPage {
                 try {
                     System.out.print("Tag to search: ");
                     System.out.flush();
-                    String content = sc.nextLine();
-                    peer.searchPosts(content);
-                    // TODO wait for response
+                    String content;
+                    do {
+                        content = sc.nextLine();
+                    } while (content.length() == 0);
+                    peer.search(content);
                 } catch (Exception e) {
-                    System.err.println("Error loading posts");
+                    System.err.println("No content discovered.");
+                    e.printStackTrace();
                 }
             }
             case 'f', 'F' -> {

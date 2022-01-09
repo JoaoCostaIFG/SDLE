@@ -5,6 +5,7 @@ import org.t3.g11.proj2.utils.Utils;
 import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.Objects;
 
 public abstract class Query implements Serializable {
     public static final int STARTTTL = 1024;
@@ -76,10 +77,23 @@ public abstract class Query implements Serializable {
 
     @Override
     public String toString() {
-        return String.format("Query(%d - %s)", this.guid, this.queryString);
+        return String.format("Query(%s - %d - %s)", this.queryType, this.guid, this.queryString);
     }
 
     public QueryType getQueryType() {
         return queryType;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Query query = (Query) o;
+        return guid == query.guid;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(guid);
     }
 }

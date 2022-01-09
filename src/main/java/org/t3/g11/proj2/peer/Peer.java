@@ -15,6 +15,9 @@ import org.t3.g11.proj2.nuttela.message.Result;
 import org.t3.g11.proj2.nuttela.message.query.Query;
 import org.t3.g11.proj2.nuttela.message.query.TagQuery;
 import org.t3.g11.proj2.nuttela.message.query.UserQuery;
+import org.t3.g11.proj2.peer.querytask.QueryTask;
+import org.t3.g11.proj2.peer.querytask.QueryTaskInteface;
+import org.t3.g11.proj2.peer.querytask.QueryTaskMock;
 import org.t3.g11.proj2.utils.Utils;
 import org.zeromq.SocketType;
 import org.zeromq.ZContext;
@@ -33,9 +36,7 @@ import java.security.PublicKey;
 import java.security.spec.InvalidKeySpecException;
 import java.sql.SQLException;
 import java.util.*;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.regex.Pattern;
 
 public class Peer implements PeerObserver {
@@ -43,7 +44,7 @@ public class Peer implements PeerObserver {
 
     private final ZMQ.Socket ksSocket;
     private final KeyHolder keyHolder;
-    private HashMap<Integer, QueryTask> queryTasks = new HashMap<>();
+    private HashMap<Integer, QueryTaskInteface> queryTasks = new HashMap<>();
 
     private PeerData peerData;
     private boolean authenticated;
@@ -83,6 +84,14 @@ public class Peer implements PeerObserver {
         try {
             this.node.buildBloom(this.peerData.getSubs());
             this.node.addToBloom(this.peerData.getSelfUsername());
+            // TODO add tags from subs posts too?
+            // add tags to bloom filter
+            var posts = this.peerData.getSelfPosts();
+            for (var post : posts) {
+                for (String tag : Peer.tokenize(post.get("content"))) {
+                    this.node.addToBloom(tag);
+                }
+            }
         } catch (SQLException throwables) {
             System.out.println("Problem getting subscriptions");
             throwables.printStackTrace();
@@ -106,9 +115,22 @@ public class Peer implements PeerObserver {
         }
     }
 
-    public void searchPosts(String content) {
-        Query q = this.node.genQueryTag(1, content);
-        this.queryTasks.put(q.getGuid(), new QueryTask(q.getNeededHits()));
+    public Set<Result> search(String content) {
+        content = tokenize("#" + content).iterator().next();
+        Query q = this.node.genQueryTag(2, content);
+        QueryTask task = new QueryTask(this.node, q);
+        this.queryTasks.put(q.getGuid(), task);
+        try {
+            Executors.newSingleThreadExecutor().execute(task);
+            task.get(5, TimeUnit.SECONDS);
+        } catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+        } catch (TimeoutException e) {
+            System.err.println("Timeout");
+        }
+        this.queryTasks.replace(q.getGuid(), new QueryTaskMock());
+
+        return task.getResults();
     }
 
     public boolean register(String username) {
@@ -230,12 +252,19 @@ public class Peer implements PeerObserver {
             System.err.println(throwables.getMessage());
             return false;
         }
+
+        // TODO add tags from subs posts too?
+        // add tags to bloom filter
+        for (String tag : Peer.tokenize(content)) {
+            this.node.addToBloom(tag);
+        }
+
         return true;
     }
 
     public List<HashMap<String, String>> getSelfPeerPosts() {
         try {
-            return peerData.getPostsSelf();
+            return peerData.getSelfPosts();
         } catch (SQLException throwables) {
             System.err.println(throwables.getMessage());
             return Collections.emptyList();
@@ -326,9 +355,16 @@ public class Peer implements PeerObserver {
     }
 
     @Override
-    public void handleNewResults(List<Result> results) {
+    public void handleNewResults(int guid, List<Result> results) {
+        if (this.queryTasks.containsKey(guid)) {
+            // put query results in sink
+            this.queryTasks.get(guid).addResults(results);
+            return;
+        }
+
+        // handle save query results
         for (Result post : results) {
-            String content = null;
+            String content;
             try {
                 content = this.decypherText(post.ciphered, post.author);
                 this.getPeerData().addPost(post.author, post.guid, content, post.ciphered, post.date);
@@ -358,7 +394,21 @@ public class Peer implements PeerObserver {
 
     @Override
     public List<Result> getTagResults(String tag) {
-        return null;
+        List<Result> results = new ArrayList<>();
+        try {
+            var posts = this.peerData.getSelfPosts();
+            for (var post : posts) {
+                if (Peer.tokenize(post.get("content")).contains(tag)) {
+                    results.add(new Result(Integer.parseInt(post.get("guid")),
+                            Long.parseLong(post.get("timestamp")),
+                            post.get("ciphered"), post.get("author")));
+                }
+            }
+        } catch (SQLException throwables) {
+            throwables.printStackTrace();
+            return results;
+        }
+        return results;
     }
 
     @Override
@@ -379,7 +429,7 @@ public class Peer implements PeerObserver {
     private static Set<String> tokenize(String input) {
         Set<String> ret = new HashSet<>();
 
-        try (Tokenizer tokenizer = new PatternTokenizer(Pattern.compile("#([a-zA-Z0-9_]+)"), 1)) {
+        try (Tokenizer tokenizer = new PatternTokenizer(Pattern.compile("#+([a-zA-Z0-9_]+)"), 1)) {
             tokenizer.setReader(new StringReader(input));
             CharTermAttribute charTermAttribute = tokenizer.addAttribute(CharTermAttribute.class);
             TokenStream stream = new LowerCaseFilter(tokenizer);
