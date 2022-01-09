@@ -135,7 +135,7 @@ public class PeerData {
         return this.getPosts(user_id);
     }
 
-    public List<HashMap<String, String>> getPostsSelf() throws SQLException {
+    public List<HashMap<String, String>> getSelfPosts() throws SQLException {
         return this.getPosts(this.username);
     }
 
@@ -181,5 +181,9 @@ public class PeerData {
 
         pstmt.close();
         return ret;
+    }
+
+    public List<HashMap<String, String>> getPostsWithTag(String tag) throws SQLException {
+        return new ArrayList<>();
     }
 }

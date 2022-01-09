@@ -5,7 +5,6 @@ import org.t3.g11.proj2.nuttela.message.GnuMessage;
 import java.net.InetSocketAddress;
 
 public enum GnuNodeCMD {
-    ACK,
     NEIGH, // id, address, n_neigh, capacity
     NUMNEIGH,
     MYNEIGH, // n_neigh
@@ -14,7 +13,6 @@ public enum GnuNodeCMD {
     DROP, // id, address
     PING,
     PONG,
-    PUSH,
     QUERY,
     QUERYHIT;
 

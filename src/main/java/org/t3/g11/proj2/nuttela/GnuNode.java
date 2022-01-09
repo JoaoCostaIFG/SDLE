@@ -4,6 +4,9 @@ import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
 import com.google.common.util.concurrent.AtomicDouble;
 import org.t3.g11.proj2.nuttela.message.*;
+import org.t3.g11.proj2.nuttela.message.query.Query;
+import org.t3.g11.proj2.nuttela.message.query.TagQuery;
+import org.t3.g11.proj2.nuttela.message.query.UserQuery;
 import org.t3.g11.proj2.peer.PeerObserver;
 
 import java.io.IOException;
@@ -169,18 +172,22 @@ public class GnuNode implements Runnable {
             }
             GnuNodeInfo toDrop =
                     Collections.max(dropCandidates, Comparator.comparingInt(e -> e.getValue().nNeighbors)).getValue();
+
             // also need the neighbor with the most capacity
-            GnuNodeInfo maxCap =
-                    Collections.max(this.neighbors.entrySet().stream().toList(), Comparator.comparingInt(e -> e.getValue().capacity)).getValue();
-            // test to accept
-            if (reply.getCapacity() > maxCap.capacity ||
-                    toDrop.nNeighbors > reply.getNeighbors() + GnuNode.HYSTERESIS_FACTOR) {
-                // accept Y
-                this.neighbors.put(reply.getId(), new GnuNodeInfo(reply.getId(), reply.getNeighbors(), reply.getCapacity(), reply.getAddr(), reply.getBloomFilter()));
-                oos.writeObject(new NeighMessage(this.addr, this.id, this.neighbors.size(), this.capacity, this.bloomFilter));
-                oos.flush();
-                this.dropNeigh(toDrop);
-                return true;
+            Optional<Map.Entry<Integer, GnuNodeInfo>> maxCap =
+                    this.neighbors.entrySet().stream().max(Comparator.comparingInt(e -> e.getValue().capacity));
+
+            if (maxCap.isPresent()) {
+                // test to accept
+                if (reply.getCapacity() > maxCap.get().getValue().capacity ||
+                        toDrop.nNeighbors > reply.getNeighbors() + GnuNode.HYSTERESIS_FACTOR) {
+                    // accept Y
+                    this.neighbors.put(reply.getId(), new GnuNodeInfo(reply.getId(), reply.getNeighbors(), reply.getCapacity(), reply.getAddr(), reply.getBloomFilter()));
+                    oos.writeObject(new NeighMessage(this.addr, this.id, this.neighbors.size(), this.capacity, this.bloomFilter));
+                    oos.flush();
+                    this.dropNeigh(toDrop);
+                    return true;
+                }
             }
 
             // otherwise just reject Y
@@ -246,8 +253,16 @@ public class GnuNode implements Runnable {
         }
     }
 
-    public void query(int neededHits, String queryString, long queryTimestamp) {
-        this.query(new QueryMessage(this.addr, this.id, new Query(this.addr, this.id, neededHits, queryString, queryTimestamp)));
+    public void query(Query query) {
+        this.query(new QueryMessage(this.addr, this.id, query));
+    }
+
+    public Query genQueryUser(int neededHits, String queryString, long queryTimestamp) {
+        return new UserQuery(this.addr, this.id, neededHits, queryString, queryTimestamp);
+    }
+
+    public Query genQueryTag(int neededHits, String queryString) {
+        return new TagQuery(this.addr, this.id, neededHits, queryString);
     }
 
     /**
@@ -506,6 +521,11 @@ public class GnuNode implements Runnable {
                 }
             }
 
+            if (maxEntry == null) {
+                this.neighbors.put(neighReply.getId(), newNeighInfo);
+                return;
+            }
+
             DropMessage dropMessage = new DropMessage(this.addr, this.id);
             GnuMessage reply;
             try (Socket socket = new Socket(maxEntry.getValue().getInetAddr(), maxEntry.getValue().getPort())) {
@@ -534,7 +554,7 @@ public class GnuNode implements Runnable {
     protected void handleDrop(ObjectOutputStream oos, DropMessage reqMsg) {
         GnuMessage reply;
         try {
-            if (this.neighbors.size() > 1) {
+            if (this.neighbors.size() > GnuNode.MIN_NEIGH) {
                 reply = GnuNodeCMD.DROPOK.getMessage(this.addr);
                 this.neighbors.remove(reqMsg.getId());
             } else {
@@ -575,14 +595,7 @@ public class GnuNode implements Runnable {
      */
     protected void handleQueryHit(QueryHitMessage reqMsg) {
         List<Result> hitPosts = reqMsg.getResultSet();
-        for (Result post : hitPosts) {
-            try {
-                this.peerObserver.newPeerPost(post.guid, post.date, post.ciphered, post.author);
-            } catch (Exception e) {
-                System.err.println("Got a post from someone that does not exist (does not have keys)");
-                e.printStackTrace();
-            }
-        }
+        this.peerObserver.handleNewResults(reqMsg.getGuid(), hitPosts);
     }
 
     private void handleQueuedQuery(QueuedQuery queuedQuery) {
@@ -590,7 +603,7 @@ public class GnuNode implements Runnable {
         // TODO this is only searching by username
         if (this.bloomFilter.mightContain(query.getQueryString()) && this.peerObserver != null) {
             // gather results
-            List<Result> results = this.peerObserver.getResults(query.getQueryString(), query.getLatestDate());
+            List<Result> results = this.peerObserver.handleQuery(query);
             if (!results.isEmpty()) {
                 // got a hit
                 query.decreaseNeededHits(results.size());

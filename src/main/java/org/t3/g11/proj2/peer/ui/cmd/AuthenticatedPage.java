@@ -24,6 +24,7 @@ public class AuthenticatedPage implements CmdPage {
         System.out.print("""
                 n - New post
                 p - List stored posts
+                s - Search for content
                 f - Follow someone
                 u - Unfollow someone
                 l - Lookup content
@@ -67,6 +68,20 @@ public class AuthenticatedPage implements CmdPage {
                     }
                 } catch (Exception e) {
                     System.err.println("Error loading posts");
+                }
+            }
+            case 's', 'S' -> {
+                try {
+                    System.out.print("Tag to search: ");
+                    System.out.flush();
+                    String content;
+                    do {
+                        content = sc.nextLine();
+                    } while (content.length() == 0);
+                    peer.search(content);
+                } catch (Exception e) {
+                    System.err.println("No content discovered.");
+                    e.printStackTrace();
                 }
             }
             case 'f', 'F' -> {
