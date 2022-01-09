@@ -9,15 +9,15 @@ import java.util.Arrays;
 public class Main {
 
     public static void main(String[] args) {
-        if (args.length < 3) {
-            System.out.println("Usage: Peer <id> <routerIP> <routerPort>");
+        if (args.length != 2) {
+            System.out.println("Usage: Peer <address> <port>");
             return;
         }
 
         ZContext zctx = new ZContext();
         Peer peer;
         try {
-            peer = new Peer(zctx, Integer.parseInt(args[0]), args[1], Integer.parseInt(args[2]));
+            peer = new Peer(zctx, args[0], Integer.parseInt(args[1]));
         } catch (Exception e) {
             e.printStackTrace();
             System.exit(1);
