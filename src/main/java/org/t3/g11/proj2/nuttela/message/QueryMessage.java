@@ -1,6 +1,7 @@
 package org.t3.g11.proj2.nuttela.message;
 
 import org.t3.g11.proj2.nuttela.GnuNodeCMD;
+import org.t3.g11.proj2.nuttela.message.query.Query;
 
 import java.net.InetSocketAddress;
 

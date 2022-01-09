@@ -182,4 +182,8 @@ public class PeerData {
         pstmt.close();
         return ret;
     }
+
+    public List<HashMap<String, String>> getPostsWithTag(String tag) throws SQLException {
+        return new ArrayList<>();
+    }
 }

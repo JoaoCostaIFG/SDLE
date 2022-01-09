@@ -14,4 +14,9 @@ public class Result implements Serializable {
         this.ciphered = ciphered;
         this.author = author;
     }
+
+    @Override
+    public int hashCode() {
+        return Integer.hashCode(this.guid);
+    }
 }

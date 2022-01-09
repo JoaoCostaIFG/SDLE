@@ -24,6 +24,7 @@ public class AuthenticatedPage implements CmdPage {
         System.out.print("""
                 n - New post
                 p - List stored posts
+                s - Search for content
                 f - Follow someone
                 u - Unfollow someone
                 l - Lookup content
@@ -65,6 +66,17 @@ public class AuthenticatedPage implements CmdPage {
                         tf.printPostRow(post.get("author"), post.get("content"),
                                 post.get("timestamp"));
                     }
+                } catch (Exception e) {
+                    System.err.println("Error loading posts");
+                }
+            }
+            case 's', 'S' -> {
+                try {
+                    System.out.print("Tag to search: ");
+                    System.out.flush();
+                    String content = sc.nextLine();
+                    peer.searchPosts(content);
+                    // TODO wait for response
                 } catch (Exception e) {
                     System.err.println("Error loading posts");
                 }

@@ -3,7 +3,7 @@ package org.t3.g11.proj2.nuttela;
 import com.google.common.collect.MinMaxPriorityQueue;
 import com.google.common.hash.BloomFilter;
 import org.t3.g11.proj2.nuttela.message.PongMessage;
-import org.t3.g11.proj2.nuttela.message.Query;
+import org.t3.g11.proj2.nuttela.message.query.Query;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;

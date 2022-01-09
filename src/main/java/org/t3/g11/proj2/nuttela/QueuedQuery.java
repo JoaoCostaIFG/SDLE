@@ -1,6 +1,6 @@
 package org.t3.g11.proj2.nuttela;
 
-import org.t3.g11.proj2.nuttela.message.Query;
+import org.t3.g11.proj2.nuttela.message.query.Query;
 
 import java.util.Comparator;
 

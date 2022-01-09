@@ -1,11 +1,16 @@
 package org.t3.g11.proj2.peer;
 
 import org.t3.g11.proj2.nuttela.message.Result;
+import org.t3.g11.proj2.nuttela.message.query.Query;
 
 import java.util.List;
 
 public interface PeerObserver {
-    List<Result> getResults(String username, long timestamp);
+    void handleNewResults(List<Result> results);
 
-    void newPeerPost(int guid, long date, String ciphered, String author) throws Exception;
+    List<Result> getUserResults(String username, long timestamp);
+
+    List<Result> getTagResults(String queryString);
+
+    List<Result> handleQuery(Query query);
 }

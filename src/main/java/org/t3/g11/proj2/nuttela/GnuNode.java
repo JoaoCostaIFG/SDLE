@@ -4,6 +4,9 @@ import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnels;
 import com.google.common.util.concurrent.AtomicDouble;
 import org.t3.g11.proj2.nuttela.message.*;
+import org.t3.g11.proj2.nuttela.message.query.Query;
+import org.t3.g11.proj2.nuttela.message.query.TagQuery;
+import org.t3.g11.proj2.nuttela.message.query.UserQuery;
 import org.t3.g11.proj2.peer.PeerObserver;
 
 import java.io.IOException;
@@ -171,15 +174,17 @@ public class GnuNode implements Runnable {
             // also need the neighbor with the most capacity
             GnuNodeInfo maxCap =
                     Collections.max(this.neighbors.entrySet().stream().toList(), Comparator.comparingInt(e -> e.getValue().capacity)).getValue();
-            // test to accept
-            if (reply.getCapacity() > maxCap.capacity ||
-                    toDrop.nNeighbors > reply.getNeighbors() + GnuNode.HYSTERESIS_FACTOR) {
-                // accept Y
-                this.neighbors.put(reply.getId(), new GnuNodeInfo(reply.getId(), reply.getNeighbors(), reply.getCapacity(), reply.getAddr(), reply.getBloomFilter()));
-                oos.writeObject(new NeighMessage(this.addr, this.id, this.neighbors.size(), this.capacity, this.bloomFilter));
-                oos.flush();
-                this.dropNeigh(toDrop);
-                return true;
+            if (maxCap != null) {
+                // test to accept
+                if (reply.getCapacity() > maxCap.capacity ||
+                        toDrop.nNeighbors > reply.getNeighbors() + GnuNode.HYSTERESIS_FACTOR) {
+                    // accept Y
+                    this.neighbors.put(reply.getId(), new GnuNodeInfo(reply.getId(), reply.getNeighbors(), reply.getCapacity(), reply.getAddr(), reply.getBloomFilter()));
+                    oos.writeObject(new NeighMessage(this.addr, this.id, this.neighbors.size(), this.capacity, this.bloomFilter));
+                    oos.flush();
+                    this.dropNeigh(toDrop);
+                    return true;
+                }
             }
 
             // otherwise just reject Y
@@ -245,8 +250,12 @@ public class GnuNode implements Runnable {
         }
     }
 
-    public void query(int neededHits, String queryString, long queryTimestamp) {
-        this.query(new QueryMessage(this.addr, this.id, new Query(this.addr, this.id, neededHits, queryString, queryTimestamp)));
+    public void queryUser(int neededHits, String queryString, long queryTimestamp) {
+        this.query(new QueryMessage(this.addr, this.id, new UserQuery(this.addr, this.id, neededHits, queryString, queryTimestamp)));
+    }
+
+    public void queryTag(int neededHits, String queryString) {
+        this.query(new QueryMessage(this.addr, this.id, new TagQuery(this.addr, this.id, neededHits, queryString)));
     }
 
     /**
@@ -533,7 +542,7 @@ public class GnuNode implements Runnable {
     protected void handleDrop(ObjectOutputStream oos, DropMessage reqMsg) {
         GnuMessage reply;
         try {
-            if (this.neighbors.size() > 1) {
+            if (this.neighbors.size() > GnuNode.MIN_NEIGH) {
                 reply = GnuNodeCMD.DROPOK.getMessage(this.addr);
                 this.neighbors.remove(reqMsg.getId());
             } else {
@@ -574,14 +583,7 @@ public class GnuNode implements Runnable {
      */
     protected void handleQueryHit(QueryHitMessage reqMsg) {
         List<Result> hitPosts = reqMsg.getResultSet();
-        for (Result post : hitPosts) {
-            try {
-                this.peerObserver.newPeerPost(post.guid, post.date, post.ciphered, post.author);
-            } catch (Exception e) {
-                System.err.println("Got a post from someone that does not exist (does not have keys)");
-                e.printStackTrace();
-            }
-        }
+        this.peerObserver.handleNewResults(hitPosts);
     }
 
     private void handleQueuedQuery(QueuedQuery queuedQuery) {
@@ -589,22 +591,22 @@ public class GnuNode implements Runnable {
         // TODO this is only searching by username
         if (this.bloomFilter.mightContain(query.getQueryString()) && this.peerObserver != null) {
             // gather results
-            List<Result> results = this.peerObserver.getResults(query.getQueryString(), query.getLatestDate());
-            if (!results.isEmpty()) {
-                // got a hit
-                query.decreaseNeededHits(results.size());
-                try (Socket sendSkt = new Socket(query.getSourceAddr(), query.getSourcePort())) {
-                    ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
-                    oss.flush();
-                    ObjectInputStream ois = new ObjectInputStream(sendSkt.getInputStream());
-                    QueryHitMessage qhm = new QueryHitMessage(this.addr, query.getGuid(), results);
-                    oss.writeObject(qhm);
-                    oss.flush();
-                } catch (Exception e) {
-                    System.err.println("Couldn't connect to initiator peer");
-                    e.printStackTrace();
+                List<Result> results = this.peerObserver.handleQuery(query);
+                if (!results.isEmpty()) {
+                    // got a hit
+                    query.decreaseNeededHits(results.size());
+                    try (Socket sendSkt = new Socket(query.getSourceAddr(), query.getSourcePort())) {
+                        ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
+                        oss.flush();
+                        ObjectInputStream ois = new ObjectInputStream(sendSkt.getInputStream());
+                        QueryHitMessage qhm = new QueryHitMessage(this.addr, query.getGuid(), results);
+                        oss.writeObject(qhm);
+                        oss.flush();
+                    } catch (Exception e) {
+                        System.err.println("Couldn't connect to initiator peer");
+                        e.printStackTrace();
+                    }
                 }
-            }
         }
         // maybe forward
         if (query.decreaseTtl() > 0 && query.getNeededHits() > 0) {
