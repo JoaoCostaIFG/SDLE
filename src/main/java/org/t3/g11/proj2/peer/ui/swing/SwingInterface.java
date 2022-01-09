@@ -49,7 +49,7 @@ class MainFrame extends JFrame {
     private void gotoAuthenticated() {
         remove(this.loginPanel);
         add(new MainPanel(this.swi));
-        setJMenuBar(new MenuBar(this));
+        setJMenuBar(new MenuBar(swi));
         pack();
         setExtendedState(JFrame.MAXIMIZED_BOTH);
         revalidate();

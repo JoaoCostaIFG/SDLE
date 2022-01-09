@@ -10,16 +10,17 @@ public class DiscoveryPanel extends JPanel {
     SwingInterface swi;
 
     public DiscoveryPanel(SwingInterface swi) {
-        super(new MigLayout("inset 20"));
+        super(new MigLayout("inset 20, fill"));
 
         this.swi = swi;
 
         JLabel header = new JLabel("Discovery");
-        header.setHorizontalAlignment(JLabel.CENTER);
-        header.setFont( UIManager.getFont( "h0.font" ) );
-        add(header, "wrap");
-        add(new JSeparator(), "wrap");
+        header.setFont(UIManager.getFont("h0.font"));
+        add(header, "span, wrap");
 
-        add(new JLabel("Not yet implemented", JLabel.CENTER), "span, wrap");
+        JSeparator sep = new JSeparator(JSeparator.HORIZONTAL);
+        add(sep, "span, growx, hmin 2px, wrap");
+
+        add(new JLabel("Not yet implemented", JLabel.CENTER), "span, grow, pushy, wrap");
     }
 }
