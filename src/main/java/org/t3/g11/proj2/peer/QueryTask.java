@@ -51,15 +51,15 @@ class QueryTaskRunnable implements Runnable {
     }
 }
 
-public class QueryTask extends FutureTask<List<Result>> {
+public class QueryTask extends FutureTask<Set<Result>> {
     private final QueryTaskRunnable runnable;
 
-    private QueryTask(QueryTaskRunnable runnable, List<Result> result) {
+    private QueryTask(QueryTaskRunnable runnable, Set<Result> result) {
         super(runnable, result);
         this.runnable = runnable;
     }
 
-    public QueryTask(int neededHits, List<Result> result) {
+    public QueryTask(int neededHits, Set<Result> result) {
         this(new QueryTaskRunnable(neededHits), result);
     }
 

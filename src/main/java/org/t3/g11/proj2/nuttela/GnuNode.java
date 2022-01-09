@@ -250,12 +250,17 @@ public class GnuNode implements Runnable {
         }
     }
 
-    public void queryUser(int neededHits, String queryString, long queryTimestamp) {
-        this.query(new QueryMessage(this.addr, this.id, new UserQuery(this.addr, this.id, neededHits, queryString, queryTimestamp)));
+    public void query(Query query) {
+        this.query(new QueryMessage(this.addr, this.id, query));
     }
 
-    public void queryTag(int neededHits, String queryString) {
-        this.query(new QueryMessage(this.addr, this.id, new TagQuery(this.addr, this.id, neededHits, queryString)));
+
+    public Query genQueryUser(int neededHits, String queryString, long queryTimestamp) {
+        return new UserQuery(this.addr, this.id, neededHits, queryString, queryTimestamp);
+    }
+
+    public Query genQueryTag(int neededHits, String queryString) {
+        return new TagQuery(this.addr, this.id, neededHits, queryString);
     }
 
     /**
@@ -591,22 +596,22 @@ public class GnuNode implements Runnable {
         // TODO this is only searching by username
         if (this.bloomFilter.mightContain(query.getQueryString()) && this.peerObserver != null) {
             // gather results
-                List<Result> results = this.peerObserver.handleQuery(query);
-                if (!results.isEmpty()) {
-                    // got a hit
-                    query.decreaseNeededHits(results.size());
-                    try (Socket sendSkt = new Socket(query.getSourceAddr(), query.getSourcePort())) {
-                        ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
-                        oss.flush();
-                        ObjectInputStream ois = new ObjectInputStream(sendSkt.getInputStream());
-                        QueryHitMessage qhm = new QueryHitMessage(this.addr, query.getGuid(), results);
-                        oss.writeObject(qhm);
-                        oss.flush();
-                    } catch (Exception e) {
-                        System.err.println("Couldn't connect to initiator peer");
-                        e.printStackTrace();
-                    }
+            List<Result> results = this.peerObserver.handleQuery(query);
+            if (!results.isEmpty()) {
+                // got a hit
+                query.decreaseNeededHits(results.size());
+                try (Socket sendSkt = new Socket(query.getSourceAddr(), query.getSourcePort())) {
+                    ObjectOutputStream oss = new ObjectOutputStream(sendSkt.getOutputStream());
+                    oss.flush();
+                    ObjectInputStream ois = new ObjectInputStream(sendSkt.getInputStream());
+                    QueryHitMessage qhm = new QueryHitMessage(this.addr, query.getGuid(), results);
+                    oss.writeObject(qhm);
+                    oss.flush();
+                } catch (Exception e) {
+                    System.err.println("Couldn't connect to initiator peer");
+                    e.printStackTrace();
                 }
+            }
         }
         // maybe forward
         if (query.decreaseTtl() > 0 && query.getNeededHits() > 0) {

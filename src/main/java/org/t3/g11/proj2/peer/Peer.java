@@ -13,7 +13,6 @@ import org.t3.g11.proj2.keyserver.message.UnidentifiedMessage;
 import org.t3.g11.proj2.nuttela.GnuNode;
 import org.t3.g11.proj2.nuttela.message.Result;
 import org.t3.g11.proj2.nuttela.message.query.Query;
-import org.t3.g11.proj2.nuttela.message.query.QueryType;
 import org.t3.g11.proj2.nuttela.message.query.TagQuery;
 import org.t3.g11.proj2.nuttela.message.query.UserQuery;
 import org.t3.g11.proj2.utils.Utils;
@@ -44,10 +43,11 @@ public class Peer implements PeerObserver {
 
     private final ZMQ.Socket ksSocket;
     private final KeyHolder keyHolder;
-    private final InetSocketAddress nodeAddr; // for late intialization
+    private HashMap<Integer, QueryTask> queryTasks = new HashMap<>();
 
     private PeerData peerData;
     private boolean authenticated;
+    private final InetSocketAddress nodeAddr; // for late intialization
     private GnuNode node; // initialized late
     private Thread nodeT; // initialized late
 
@@ -97,7 +97,8 @@ public class Peer implements PeerObserver {
         for (String sub : this.getSubs()) {
             try {
                 // we're okay with 1
-                this.node.queryUser(1, sub, this.peerData.getLastUserPostDate(sub));
+                Query q = this.node.genQueryUser(1, sub, this.peerData.getLastUserPostDate(sub));
+                this.node.query(q);
             } catch (Exception e) {
                 System.err.println("Problem getting info about user: " + sub);
                 e.printStackTrace();
@@ -106,7 +107,8 @@ public class Peer implements PeerObserver {
     }
 
     public void searchPosts(String content) {
-        this.node.queryTag(1, content);
+        Query q = this.node.genQueryTag(1, content);
+        this.queryTasks.put(q.getGuid(), new QueryTask(q.getNeededHits()));
     }
 
     public boolean register(String username) {
@@ -277,7 +279,8 @@ public class Peer implements PeerObserver {
         this.peerData.addUser(username, KeyHolder.encodeKey(publicKey));
         try {
             // we're okay with 1
-            this.node.queryUser(1, username, this.peerData.getLastUserPostDate(username));
+            Query q = this.node.genQueryUser(1, username, this.peerData.getLastUserPostDate(username));
+            this.node.query(q);
         } catch (Exception e) {
             System.err.println("Problem getting info about user: " + username);
             e.printStackTrace();
