@@ -7,6 +7,11 @@ import org.t3.g11.proj2.peer.ui.swing.SwingInterface;
 
 import javax.swing.*;
 import java.awt.*;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.SortedSet;
 
 class TimelinePost extends JPanel {
     public TimelinePost(String username, String timestamp, String content) {
@@ -46,15 +51,29 @@ public class TimelinePanel extends JPanel {
 
         JLabel header = new JLabel("Timeline");
         header.setFont(UIManager.getFont("h0.font"));
-        add(header, "span, wrap");
+        add(header);
+
+        JLabel userLabel = new JLabel(swi.peer.getPeerData().getSelfUsername());
+        userLabel.setHorizontalAlignment(JLabel.RIGHT);
+        userLabel.setFont(UIManager.getFont("large.font"));
+        add(userLabel, "align right, wrap");
 
         JSeparator sep = new JSeparator(JSeparator.HORIZONTAL);
         add(sep, "span, growx, hmin 2px, wrap");
 
         this.postsPanel = new JPanel(new MigLayout(""));
-        addPost("souto", "12 jan 2021", "Não há report para ninguém amiguinhos");
-        addPost("baquero", "12 jan 2021", "O meu barril é baril");
-        addPost("baquero", "12 jan 2021", "Guys tenho um barril no jardim");
+
+        SortedSet<HashMap<String, String>> posts = null;
+        DateFormat format = new SimpleDateFormat("dd/MM/yyyy HH:mm");
+        try {
+            posts = swi.peer.getPosts();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        for (var post: posts) {
+            Date d = new Date(Long.parseLong(post.get("timestamp")));
+            addPost(post.get("author"), format.format(d), post.get("content"));
+        }
 
 
         JScrollPane scrollPane = new JScrollPane(postsPanel);

@@ -16,7 +16,12 @@ public class DiscoveryPanel extends JPanel {
 
         JLabel header = new JLabel("Discovery");
         header.setFont(UIManager.getFont("h0.font"));
-        add(header, "span, wrap");
+        add(header);
+
+        JLabel userLabel = new JLabel(swi.peer.getPeerData().getSelfUsername());
+        userLabel.setHorizontalAlignment(JLabel.RIGHT);
+        userLabel.setFont(UIManager.getFont("large.font"));
+        add(userLabel, "align right, wrap");
 
         JSeparator sep = new JSeparator(JSeparator.HORIZONTAL);
         add(sep, "span, growx, hmin 2px, wrap");
