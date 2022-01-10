@@ -52,6 +52,8 @@ public class Peer implements PeerObserver {
     private GnuNode node; // initialized late
     private Thread nodeT; // initialized late
 
+    private final List<PeerStateObserver> stateObservers = new ArrayList<>();
+
     public Peer(ZContext zctx, String address, int port) throws Exception {
         this.ksSocket = zctx.createSocket(SocketType.REQ);
         if (!this.ksSocket.connect(KeyServer.KEYENDPOINT)) {
@@ -262,6 +264,9 @@ public class Peer implements PeerObserver {
             this.node.addToBloom(tag);
         }
 
+        for (var obs: this.stateObservers)
+            obs.newPost(this.peerData.getSelfUsername(), System.currentTimeMillis(), content);
+
         return true;
     }
 
@@ -371,6 +376,8 @@ public class Peer implements PeerObserver {
             try {
                 content = this.decypherText(post.ciphered, post.author);
                 this.getPeerData().addPost(post.author, post.guid, content, post.ciphered, post.date);
+                for (PeerStateObserver obs : this.stateObservers)
+                    obs.newPost(post.author, post.date, content);
             } catch (Exception e) {
                 System.err.println("Failed to add post with stacktrace:");
                 e.printStackTrace();
@@ -449,5 +456,9 @@ public class Peer implements PeerObserver {
     }
 
     public void shutdown() {
+    }
+
+    public void addObserver(PeerStateObserver observer) {
+        this.stateObservers.add(observer);
     }
 }
