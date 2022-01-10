@@ -46,11 +46,11 @@ public class GnuNode implements Runnable {
     private PeerObserver peerObserver = null;
 
     private final Semaphore querySemaphore = new Semaphore(0, true);
-    private AtomicDouble maxFinishTagServed = new AtomicDouble(0.0);
-    private AtomicDouble currentStartTag = new AtomicDouble(-1.0);
+    private final AtomicDouble maxFinishTagServed = new AtomicDouble(0.0);
+    private final AtomicDouble currentStartTag = new AtomicDouble(-1.0);
 
     public GnuNode(int id, InetSocketAddress addr, int maxNeigh, int capacity) throws IOException {
-        this.id = id; // TODO hash username
+        this.id = id;
         this.addr = addr;
         this.maxNeigh = maxNeigh;
         this.capacity = capacity;
@@ -591,6 +591,8 @@ public class GnuNode implements Runnable {
     }
 
     private void handleQueuedQuery(QueuedQuery queuedQuery) {
+        this.currentStartTag.set(queuedQuery.getStartTag());
+
         Query query = queuedQuery.getQuery();
         // TODO this is only searching by username
         if (this.bloomFilter.mightContain(query.getQueryString()) && this.peerObserver != null) {
@@ -621,6 +623,12 @@ public class GnuNode implements Runnable {
 
             QueryMessage relayMsg = new QueryMessage(this.addr, this.id, query);
             this.query(relayMsg);
+        }
+
+        synchronized (this.maxFinishTagServed) {
+            if (queuedQuery.getFinishTag() > this.maxFinishTagServed.get()) {
+                this.maxFinishTagServed.set(queuedQuery.getFinishTag());
+            }
         }
     }
 
