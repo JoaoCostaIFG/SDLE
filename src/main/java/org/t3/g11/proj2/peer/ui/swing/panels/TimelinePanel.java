@@ -1,44 +1,19 @@
 package org.t3.g11.proj2.peer.ui.swing.panels;
 
-import com.formdev.flatlaf.FlatClientProperties;
-import com.formdev.flatlaf.ui.FlatLineBorder;
 import net.miginfocom.swing.MigLayout;
 import org.t3.g11.proj2.peer.PeerStateObserver;
 import org.t3.g11.proj2.peer.ui.swing.SwingInterface;
+import org.t3.g11.proj2.peer.ui.swing.components.UserPost;
 
+import javax.sound.sampled.*;
 import javax.swing.*;
-import java.awt.*;
+import java.io.IOException;
+import java.net.URL;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.SortedSet;
-
-class TimelinePost extends JPanel {
-    public TimelinePost(String username, String timestamp, String content) {
-        super(new MigLayout("fillx"));
-
-        putClientProperty(FlatClientProperties.STYLE,
-                "[light]background: tint(@background,50%);" +
-                        "[dark]background: shade(@background,15%);" +
-                        "[light]border: 4,4,4,4,shade(@background,10%),,8;" +
-                        "[dark]border: 4,4,4,4,tint(@background,10%),,8");
-
-        JLabel usernameLabel = new JLabel(username);
-        usernameLabel.setFont(UIManager.getFont("h4.font"));
-        add(usernameLabel, "");
-
-        JSeparator sep = new JSeparator(JSeparator.VERTICAL);
-        add(sep, "growy, wmin 2px");
-
-        JLabel timestampLabel = new JLabel(timestamp);
-        timestampLabel.setEnabled(false);
-        add(timestampLabel, "wrap");
-
-        JLabel contentLabel = new JLabel(content);
-        add(contentLabel, "span, growx, wrap");
-    }
-}
 
 public class TimelinePanel extends JPanel implements PeerStateObserver {
 
@@ -90,12 +65,12 @@ public class TimelinePanel extends JPanel implements PeerStateObserver {
 
     private void addPost(String username, String timestamp, String content) {
         Date d = new Date(Long.parseLong(timestamp));
-        this.postsPanel.add(new TimelinePost(username, format.format(d), content), "span, wrap");
+        this.postsPanel.add(new UserPost(username, format.format(d), content), "span, wrap");
     }
 
     private void addNewPost(String username, long timestamp, String content) {
         Date d = new Date(timestamp);
-        this.postsPanel.add(new TimelinePost(username, format.format(d), content), "span, wrap", 0);
+        this.postsPanel.add(new UserPost(username, format.format(d), content), "span, wrap", 0);
     }
 
     @Override
@@ -108,5 +83,18 @@ public class TimelinePanel extends JPanel implements PeerStateObserver {
             invalidate();
             repaint();
         });
+
+        try {
+            // Open an audio input stream.
+            URL url = this.getClass().getClassLoader().getResource("brown_headed_cowbird_one_call.wav");
+            AudioInputStream audioIn = AudioSystem.getAudioInputStream(url);
+            // Get a sound clip resource.
+            Clip clip = AudioSystem.getClip();
+            // Open audio clip and load samples from the audio input stream.
+            clip.open(audioIn);
+            clip.start();
+        } catch (UnsupportedAudioFileException | IOException | LineUnavailableException e) {
+            e.printStackTrace();
+        }
     }
 }

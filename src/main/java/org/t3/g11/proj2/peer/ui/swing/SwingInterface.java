@@ -51,6 +51,7 @@ class MainFrame extends JFrame {
         add(new MainPanel(this.swi));
         setJMenuBar(new MenuBar(swi));
         pack();
+        setSize(600, 400);
         setExtendedState(JFrame.MAXIMIZED_BOTH);
         revalidate();
     }
@@ -74,5 +75,17 @@ public class SwingInterface extends JFrame implements PeerInterface {
 
             MainFrame mf = new MainFrame(this);
         });
+    }
+
+    /** Returns an ImageIcon, or null if the path was invalid. */
+    public ImageIcon createImageIcon(String path,
+                                        String description) {
+        java.net.URL imgURL = getClass().getClassLoader().getResource(path);
+        if (imgURL != null) {
+            return new ImageIcon(imgURL, description);
+        } else {
+            System.err.println("Couldn't find file: " + path);
+            return null;
+        }
     }
 }
