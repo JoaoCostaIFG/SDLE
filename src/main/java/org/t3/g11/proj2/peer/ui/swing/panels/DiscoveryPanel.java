@@ -23,7 +23,7 @@ public class DiscoveryPanel extends JPanel {
     private final DateFormat format = new SimpleDateFormat("dd/MM/yyyy HH:mm");
 
     public DiscoveryPanel(SwingInterface swi) {
-        super(new MigLayout("inset 20, fill, debug", "", "[][][nogrid][]"));
+        super(new MigLayout("inset 20, fill", "", "[][][nogrid][]"));
 
         this.swi = swi;
 
