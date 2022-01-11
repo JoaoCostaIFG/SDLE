@@ -1,8 +1,13 @@
 package org.t3.g11.proj2.peer;
 
+import org.apache.commons.net.ntp.NTPUDPClient;
+import org.apache.commons.net.ntp.TimeInfo;
+import org.apache.commons.net.ntp.TimeStamp;
 import org.sqlite.SQLiteErrorCode;
 import org.t3.g11.proj2.utils.Utils;
 
+import java.io.IOException;
+import java.net.InetAddress;
 import java.sql.*;
 import java.util.*;
 
@@ -98,8 +103,32 @@ public class PeerData {
         this.addPost(user_id, guid, content, ciphered, date);
     }
 
+    public long getNtpTime() throws IOException {
+        NTPUDPClient client = new NTPUDPClient();
+        // We want to timeout if a response takes longer than 2 seconds
+        client.setDefaultTimeout(2_000);
+
+        InetAddress inetAddress = InetAddress.getByName("pt.pool.ntp.org");
+        TimeInfo timeInfo = client.getTime(inetAddress);
+        timeInfo.computeDetails();
+        if (timeInfo.getOffset() == null) {
+            return System.currentTimeMillis();
+        }
+
+        // Calculate the remote server NTP time
+        long currentTime = System.currentTimeMillis();
+        TimeStamp atomicNtpTime = TimeStamp.getNtpTime(currentTime + timeInfo.getOffset());
+        return atomicNtpTime.getTime();
+    }
+
+
     public void addPostSelf(String content, String ciphered) throws SQLException {
-        long timestamp = System.currentTimeMillis();
+        long timestamp;
+        try{
+            timestamp = getNtpTime();
+        }catch(Exception e){
+            timestamp = System.currentTimeMillis();
+        }
         String toHash = this.username + timestamp;
         this.addPost(this.username, Utils.IdFromName(toHash), content, ciphered, timestamp);
     }
