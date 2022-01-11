@@ -58,9 +58,8 @@ public class TimelinePanel extends JPanel implements PeerStateObserver {
         scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
-        add(scrollPane, "span, grow, pushy, wrap");
-
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
+        add(scrollPane, "span, grow, pushy, wrap");
     }
 
     private void addPost(String username, String timestamp, String content) {
