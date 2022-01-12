@@ -22,8 +22,5 @@ public class MainPanel extends JTabbedPane {
 
         JComponent discoveryPanel = new DiscoveryPanel(swi);
         addTab("Discover", null, discoveryPanel, "Find new content within the network");
-
-        JComponent socialPanel = new SocialPanel(swi);
-        addTab("Social", null, socialPanel, "Check your followers");
     }
 }

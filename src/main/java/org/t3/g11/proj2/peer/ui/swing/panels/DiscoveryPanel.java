@@ -42,8 +42,11 @@ public class DiscoveryPanel extends JPanel {
         JPanel searchBox = new JPanel(new MigLayout("fillx", "[24]10[100:400:]push"));
         add(searchBox, "span, wrap, growx");
 
-        ImageIcon icon = swi.createImageIcon("search_24.png",
+        ImageIcon icon = swi.createImageIcon("search_icon.png",
                 "Search button");
+        Image image = icon.getImage(); // transform it
+        Image newimg = image.getScaledInstance(20, 20,  java.awt.Image.SCALE_SMOOTH); // scale it the smooth way
+        icon = new ImageIcon(newimg);
         JButton searchButton = new JButton(icon);
         searchButton.setBorder(BorderFactory.createEmptyBorder());
         searchButton.setBackground(null);
