@@ -25,7 +25,7 @@ public class LoginPanel extends JPanel {
         usernameLabel.setFont( UIManager.getFont( "large.font" ) );
         add(usernameLabel,   "span, wrap");
         JTextField username = createTextField();
-        username.setText("souto");
+        username.setText("");
         add(username, "span, wrap, pushx, growx");
 
         JLabel warningText = new JLabel("Error message here");
