@@ -52,12 +52,16 @@ public class Peer implements PeerObserver {
     private GnuNode node; // initialized late
     private Thread nodeT; // initialized late
 
+    private final List<PeerStateObserver> stateObservers = new ArrayList<>();
+
     public Peer(ZContext zctx, String address, int port) throws Exception {
         this.ksSocket = zctx.createSocket(SocketType.REQ);
         if (!this.ksSocket.connect(KeyServer.KEYENDPOINT)) {
             System.err.println("Failed to connect to keyserver.");
             throw new Exception("Failed to connect to keyserver.");
         }
+
+        System.out.println(address);
 
         this.authenticated = false;
         this.keyHolder = new KeyHolder(KeyServer.KEYINSTANCE, KeyServer.KEYSIZE);
@@ -191,13 +195,14 @@ public class Peer implements PeerObserver {
 
     public boolean authenticate(String username) {
         this.authenticated = false;
-
+        System.out.println("Importing keys");
         try {
             this.keyHolder.importKeysFromFile(username);
         } catch (IOException | InvalidKeySpecException e) {
             System.err.println("Authentication failed");
             return false;
         }
+        System.out.println("Importing db");
 
         try {
             this.peerData = new PeerData(username);
@@ -207,7 +212,7 @@ public class Peer implements PeerObserver {
             this.keyHolder.clear();
             return false;
         }
-
+        System.out.println("Starting node");
         this.startNode();
         this.authenticated = true;
         return true;
@@ -258,6 +263,9 @@ public class Peer implements PeerObserver {
         for (String tag : Peer.tokenize(content)) {
             this.node.addToBloom(tag);
         }
+
+        for (var obs: this.stateObservers)
+            obs.newPost(this.peerData.getSelfUsername(), System.currentTimeMillis(), content);
 
         return true;
     }
@@ -368,6 +376,8 @@ public class Peer implements PeerObserver {
             try {
                 content = this.decypherText(post.ciphered, post.author);
                 this.getPeerData().addPost(post.author, post.guid, content, post.ciphered, post.date);
+                for (PeerStateObserver obs : this.stateObservers)
+                    obs.newPost(post.author, post.date, content);
             } catch (Exception e) {
                 System.err.println("Failed to add post with stacktrace:");
                 e.printStackTrace();
@@ -446,5 +456,9 @@ public class Peer implements PeerObserver {
     }
 
     public void shutdown() {
+    }
+
+    public void addObserver(PeerStateObserver observer) {
+        this.stateObservers.add(observer);
     }
 }

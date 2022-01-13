@@ -2,14 +2,15 @@ package org.t3.g11.proj2.peer;
 
 import org.t3.g11.proj2.peer.ui.PeerInterface;
 import org.t3.g11.proj2.peer.ui.cmd.CmdInterface;
+import org.t3.g11.proj2.peer.ui.swing.SwingInterface;
 import org.zeromq.ZContext;
 
 import java.util.Arrays;
 
 public class Main {
     public static void main(String[] args) {
-        if (args.length != 2) {
-            System.out.println("Usage: Peer <address> <port>");
+        if (args.length < 2) {
+            System.out.println("Usage: Peer <address> <port> [--gui]");
             return;
         }
 
@@ -23,11 +24,10 @@ public class Main {
             return;
         }
 
+
         PeerInterface peerInterface;
         if (Arrays.asList(args).contains("--gui")) {
-            System.err.println("Not implemented");
-            System.exit(1);
-            return;
+            peerInterface = new SwingInterface(peer);
         } else {
             peerInterface = new CmdInterface(peer);
         }

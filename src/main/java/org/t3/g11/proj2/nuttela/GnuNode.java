@@ -70,6 +70,7 @@ public class GnuNode implements Runnable {
                 this.addr.getAddress());
     }
 
+
     public GnuNode(int id, InetSocketAddress addr) throws IOException {
         this(id, addr, GnuNode.MAX_NEIGH, (int) ((Math.random() * (10 - 2)) + 2));
     }
