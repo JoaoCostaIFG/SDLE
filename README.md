@@ -1,4 +1,4 @@
-# SDLE Project #2
+# SDLE Project 2
 
 SDLE Project for group **T3G11** (FEUP, MEIC 2021/22).
 
