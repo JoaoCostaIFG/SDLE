@@ -47,4 +47,3 @@ There are 3 different **roles**:
   can be given specifying the number of updates to retrieve before unsubscribing
   from the topic and quitting. If this second argument is not specified, the
   program will stay retrieving updates forever. E.g.: `id1 get topic`.
->>>>>>> proj1/master
