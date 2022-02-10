@@ -1,0 +1,9 @@
+.idea
+.classpath
+.project
+.settings
+proj2.iml
+target
+*.db
+*.priv
+*.pub
